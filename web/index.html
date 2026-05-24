@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>虚拟用户生成器 — 基于五层设计框架</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Nav -->
+  <nav class="nav-bar">
+    <div class="nav-inner">
+      <div class="nav-brand">
+        <span class="brand-glyph">◈</span>
+        <span class="brand-name">PersonaForge</span>
+      </div>
+      <div class="nav-links">
+        <a href="#generator">生成器</a>
+        <a href="#framework">五层框架</a>
+        <a href="https://github.com" target="_blank" class="nav-gh">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero-band">
+    <div class="container">
+      <div class="eyebrow-mono">LLM-POWERED SYNTHETIC USER ENGINE</div>
+      <h1 class="hero-title">
+        用 LLM 生成<br><span class="text-green">符合场景的虚拟用户</span>
+      </h1>
+      <p class="hero-lead">
+        基于「五层设计框架」，让 LLM 以特定身份和场景约束运行。<br>
+        不是"扮演"，而是装上"身份操作系统"。
+      </p>
+      <div class="hero-actions">
+        <a href="#generator" class="btn btn-primary">开始生成</a>
+        <a href="#framework" class="btn btn-outline">了解框架</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Green divider -->
+  <div class="green-divider-band"></div>
+
+  <!-- Generator -->
+  <section id="generator" class="content-band">
+    <div class="container">
+      <div class="eyebrow-mono">PERSONA GENERATOR</div>
+      <h2 class="section-title">生成虚拟用户</h2>
+      <p class="section-desc">选择模式，描述你的目标用户，AI 会自动构建完整的五层框架。</p>
+
+      <!-- Mode Switcher -->
+      <div class="mode-switcher">
+        <button class="mode-btn active" data-mode="llm">🚀 LLM 快速扩展</button>
+        <button class="mode-btn" data-mode="manual">✏️ 手动精确填写</button>
+      </div>
+
+      <!-- LLM Mode -->
+      <div id="mode-llm" class="mode-panel active">
+        <div class="card card-feature">
+          <div class="input-group">
+            <label class="input-label">你的产品 / 服务名称</label>
+            <input type="text" id="product-name" class="text-input" placeholder="例如：PMFProbe">
+          </div>
+          <div class="input-group">
+            <label class="input-label">产品类型</label>
+            <input type="text" id="product-type" class="text-input" placeholder="例如：B2B SaaS, 开发者工具">
+          </div>
+          <div class="input-group">
+            <label class="input-label">描述你想模拟的用户</label>
+            <textarea id="user-desc" class="text-input textarea" rows="5" placeholder="例如：一个大厂5年经验的产品经理，对数据分析工具很挑剔，之前用过 Tableau 觉得太贵，正在看国产替代方案。他正在参加一个 demo 会议，时间很紧，Q3要上线新系统..."></textarea>
+            <div class="input-hint">越具体越好，AI 会自动推断年龄、技术栈、痛点、竞品经历等细节。</div>
+          </div>
+          <button id="btn-generate-llm" class="btn btn-primary btn-block">
+            <span class="btn-text">调用 DeepSeek 生成 Persona</span>
+            <span class="btn-loading hidden">生成中...</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Manual Mode -->
+      <div id="mode-manual" class="mode-panel">
+        <div class="card card-feature">
+          <!-- Product Info -->
+          <div class="accordion">
+            <div class="accordion-header active">
+              <span class="accordion-title">产品信息</span>
+              <span class="accordion-chevron">▼</span>
+            </div>
+            <div class="accordion-body" style="display:block">
+              <div class="form-row">
+                <div class="input-group">
+                  <label class="input-label">产品名称</label>
+                  <input type="text" id="m-product-name" class="text-input" placeholder="PMFProbe">
+                </div>
+                <div class="input-group">
+                  <label class="input-label">产品类型</label>
+                  <input type="text" id="m-product-type" class="text-input" placeholder="B2B SaaS">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Demographics -->
+          <div class="accordion">
+            <div class="accordion-header">
+              <span class="accordion-title">Layer 1: 身份画像</span>
+              <span class="accordion-chevron">▶</span>
+            </div>
+            <div class="accordion-body">
+              <div class="form-row">
+                <div class="input-group">
+                  <label class="input-label">职位 / 角色</label>
+                  <input type="text" id="m-role" class="text-input" placeholder="产品经理">
+                </div>
+                <div class="input-group">
+                  <label class="input-label">行业</label>
+                  <input type="text" id="m-industry" class="text-input" placeholder="互联网/科技">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="input-group">
+                  <label class="input-label">公司规模</label>
+                  <input type="text" id="m-company-size" class="text-input" placeholder="50-500人">
+                </div>
+                <div class="input-group">
+                  <label class="input-label">地区</label>
+                  <input type="text" id="m-location" class="text-input" placeholder="北京">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="input-group">
+                  <label class="input-label">年龄</label>
+                  <input type="number" id="m-age" class="text-input" placeholder="30" value="30">
+                </div>
+                <div class="input-group">
+                  <label class="input-label">工作年限</label>
+                  <input type="number" id="m-years" class="text-input" placeholder="5" value="5">
+                </div>
+              </div>
+              <div class="input-group">
+                <label class="input-label">工作目标（逗号分隔）</label>
+                <input type="text" id="m-goals" class="text-input" placeholder="提高效率, 减少试错成本">
+              </div>
+              <div class="input-group">
+                <label class="input-label">当前痛点（逗号分隔）</label>
+                <input type="text" id="m-frustrations" class="text-input" placeholder="工具复杂, 数据分散">
+              </div>
+              <div class="form-row">
+                <div class="input-group">
+                  <label class="input-label">决策风格</label>
+                  <input type="text" id="m-decision" class="text-input" placeholder="数据驱动，谨慎">
+                </div>
+                <div class="input-group">
+                  <label class="input-label">采购权限</label>
+                  <input type="text" id="m-budget" class="text-input" placeholder="有建议权，无最终决策权">
+                </div>
+              </div>
+              <div class="input-group">
+                <label class="input-label">技术栈 / 常用工具（逗号分隔）</label>
+                <input type="text" id="m-tech" class="text-input" placeholder="Notion, Figma, Mixpanel">
+              </div>
+            </div>
+          </div>
+
+          <!-- Scene -->
+          <div class="accordion">
+            <div class="accordion-header">
+              <span class="accordion-title">Layer 3: 场景注入</span>
+              <span class="accordion-chevron">▶</span>
+            </div>
+            <div class="accordion-body">
+              <div class="input-group">
+                <label class="input-label">场景描述</label>
+                <input type="text" id="m-scene" class="text-input" placeholder="正在评估是否采用该产品">
+              </div>
+              <div class="form-row">
+                <div class="input-group">
+                  <label class="input-label">初始态度</label>
+                  <input type="text" id="m-attitude" class="text-input" placeholder="怀疑但愿意了解">
+                </div>
+                <div class="input-group">
+                  <label class="input-label">时间压力</label>
+                  <input type="text" id="m-time" class="text-input" placeholder="中等——有其他工作在身">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="input-group">
+                  <label class="input-label">参与动机</label>
+                  <input type="text" id="m-motivation" class="text-input" placeholder="解决当前痛点">
+                </div>
+                <div class="input-group">
+                  <label class="input-label">之前接触程度</label>
+                  <input type="text" id="m-exposure" class="text-input" placeholder="听说过，未深入试用">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Behavior -->
+          <div class="accordion">
+            <div class="accordion-header">
+              <span class="accordion-title">Layer 5: 行为引擎</span>
+              <span class="accordion-chevron">▶</span>
+            </div>
+            <div class="accordion-body">
+              <div class="form-row">
+                <div class="input-group">
+                  <label class="input-label">沟通风格</label>
+                  <input type="text" id="m-communication" class="text-input" placeholder="直接，注重效率">
+                </div>
+                <div class="input-group">
+                  <label class="input-label">风险承受度</label>
+                  <input type="text" id="m-risk" class="text-input" placeholder="中低">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="input-group">
+                  <label class="input-label">怀疑程度 <span class="mute">0-1</span></label>
+                  <input type="number" id="m-skepticism" class="text-input" placeholder="0.6" value="0.6" step="0.1" min="0" max="1">
+                </div>
+                <div class="input-group">
+                  <label class="input-label">价格敏感度 <span class="mute">0-1</span></label>
+                  <input type="number" id="m-price" class="text-input" placeholder="0.5" value="0.5" step="0.1" min="0" max="1">
+                </div>
+              </div>
+              <div class="input-group">
+                <label class="input-label">触发关注的关键词（逗号分隔）</label>
+                <input type="text" id="m-attention" class="text-input" placeholder="效率, ROI, 上手难度">
+              </div>
+              <div class="input-group">
+                <label class="input-label">触发反感的词汇（逗号分隔）</label>
+                <input type="text" id="m-triggers" class="text-input" placeholder="赋能, 生态, 一站式">
+              </div>
+            </div>
+          </div>
+
+          <button id="btn-generate-manual" class="btn btn-primary btn-block" style="margin-top:24px">
+            <span class="btn-text">生成并优化 Persona</span>
+            <span class="btn-loading hidden">生成中...</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div id="results" class="results hidden">
+        <div class="green-divider-band" style="margin: 48px 0 32px"></div>
+        <div class="eyebrow-mono">GENERATED PERSONA</div>
+        <h2 class="section-title">生成结果</h2>
+
+        <!-- Critique Score -->
+        <div id="critique-card" class="card card-feature hidden" style="margin-bottom:24px">
+          <div class="critique-header">
+            <div class="critique-score" id="critique-score">8</div>
+            <div>
+              <div class="critique-label">LLM 质量评分</div>
+              <div class="critique-sub" id="critique-sub">基于 DeepSeek Self-Critique</div>
+            </div>
+          </div>
+          <div class="critique-body" id="critique-body"></div>
+        </div>
+
+        <!-- System Prompt -->
+        <div class="card card-feature">
+          <div class="card-header">
+            <h3 class="card-title">System Prompt（可直接用于 LLM）</h3>
+            <button class="btn btn-ghost btn-sm" id="btn-copy-prompt">📋 复制</button>
+          </div>
+          <pre class="code-mockup" id="system-prompt"></pre>
+        </div>
+
+        <!-- Five Layers -->
+        <div class="layers-grid">
+          <div class="card card-feature">
+            <div class="layer-badge">L1</div>
+            <h4 class="card-title-sm">角色定义层</h4>
+            <div class="layer-content" id="layer-1"></div>
+          </div>
+          <div class="card card-feature">
+            <div class="layer-badge">L3</div>
+            <h4 class="card-title-sm">场景注入层</h4>
+            <div class="layer-content" id="layer-3"></div>
+          </div>
+          <div class="card card-feature">
+            <div class="layer-badge">L4</div>
+            <h4 class="card-title-sm">记忆系统层</h4>
+            <div class="layer-content" id="layer-4"></div>
+          </div>
+          <div class="card card-feature">
+            <div class="layer-badge">L5</div>
+            <h4 class="card-title-sm">行为引擎层</h4>
+            <div class="layer-content" id="layer-5"></div>
+          </div>
+        </div>
+
+        <!-- Download -->
+        <div class="download-bar">
+          <button class="btn btn-outline" id="btn-download-yaml">⬇️ 下载 YAML</button>
+          <button class="btn btn-outline" id="btn-download-md">⬇️ 下载 Markdown</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Framework -->
+  <section id="framework" class="content-band">
+    <div class="container">
+      <div class="eyebrow-mono">THE FIVE-LAYER FRAMEWORK</div>
+      <h2 class="section-title">五层设计框架</h2>
+      <p class="section-desc">生成符合场景的虚拟用户，不是让 LLM "假装"成一个人，而是让 LLM 以特定身份和场景约束来运行。</p>
+
+      <div class="framework-grid">
+        <div class="card card-feature">
+          <div class="layer-number">01</div>
+          <h4 class="card-title-sm">角色定义层</h4>
+          <p class="card-body">结构化身份卡片：demographics、psychographics、behavioral traits。每个字段都影响 LLM 的注意力分布。</p>
+        </div>
+        <div class="card card-feature">
+          <div class="layer-number">02</div>
+          <h4 class="card-title-sm">大模型条件化</h4>
+          <p class="card-body">用 System Prompt 把 persona 转化为运行时约束。用具体约束替代模糊描述。</p>
+        </div>
+        <div class="card card-feature">
+          <div class="layer-number">03</div>
+          <h4 class="card-title-sm">场景注入层</h4>
+          <p class="card-body">同样的 persona，在不同场景下行为完全不同。定义时间压力、参与动机、初始态度。</p>
+        </div>
+        <div class="card card-feature">
+          <div class="layer-number">04</div>
+          <h4 class="card-title-sm">记忆系统层</h4>
+          <p class="card-body">跨会话状态追踪：trust_level、emotional_state、exposure_count。渐进式认知演化。</p>
+        </div>
+        <div class="card card-feature">
+          <div class="layer-number">05</div>
+          <h4 class="card-title-sm">行为引擎层</h4>
+          <p class="card-body">注意力过滤器 + 响应生成器 + 一致性守卫。控制虚拟用户如何"反应"。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p>基于「五层设计框架」· 所有 LLM 调用统一使用 DeepSeek API</p>
+    </div>
+  </footer>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
