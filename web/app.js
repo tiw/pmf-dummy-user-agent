@@ -14,6 +14,7 @@ const btnDownloadYaml = document.getElementById('btn-download-yaml');
 const btnDownloadMd = document.getElementById('btn-download-md');
 const results = document.getElementById('results');
 const toast = document.getElementById('toast');
+const results = document.getElementById('results');
 
 let currentResult = null;
 
@@ -43,10 +44,39 @@ document.querySelectorAll('.accordion-header').forEach(header => {
 });
 
 // ─── Helpers ───
-function showToast(msg) {
+function showToast(msg, duration = 4000) {
   toast.textContent = msg;
   toast.classList.remove('hidden');
-  setTimeout(() => toast.classList.add('hidden'), 2500);
+  setTimeout(() => toast.classList.add('hidden'), duration);
+}
+
+function showError(msg) {
+  // 持久化错误展示在结果区域
+  results.classList.remove('hidden');
+  document.getElementById('system-prompt').textContent = '';
+  document.getElementById('layer-1').innerHTML = '';
+  document.getElementById('layer-3').innerHTML = '';
+  document.getElementById('layer-4').innerHTML = '';
+  document.getElementById('layer-5').innerHTML = '';
+  document.getElementById('critique-card').classList.add('hidden');
+  document.querySelector('.download-bar').classList.add('hidden');
+
+  const errorHtml = `
+    <div style="text-align:center;padding:40px 20px;">
+      <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+      <div style="font-size:18px;font-weight:600;color:var(--ink-strong);margin-bottom:12px;">生成失败</div>
+      <div style="color:var(--body);max-width:480px;margin:0 auto;line-height:1.6;">${msg}</div>
+      <div style="margin-top:24px;padding:16px;background:var(--canvas-soft);border:1px solid var(--hairline);border-radius:var(--radius-md);text-align:left;font-size:13px;color:var(--mute);">
+        <strong style="color:var(--ink);">排查步骤：</strong><br>
+        1. 确认已设置 DEEPSEEK_API_KEY 环境变量<br>
+        2. 确认 API Key 有效且未过期<br>
+        3. 检查后端服务是否正常运行
+      </div>
+    </div>
+  `;
+  document.querySelector('.card-header').innerHTML = '<h3 class="card-title">错误信息</h3>';
+  document.getElementById('system-prompt').innerHTML = errorHtml;
+  results.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function setLoading(btn, isLoading) {
@@ -156,7 +186,7 @@ async function generateLlm() {
     renderResult(data);
     showToast('生成成功！');
   } catch (err) {
-    showToast('错误: ' + err.message);
+    showError(err.message);
     console.error(err);
   } finally {
     setLoading(btnGenerateLlm, false);
@@ -223,7 +253,7 @@ async function generateManual() {
     renderResult(data);
     showToast('生成成功！');
   } catch (err) {
-    showToast('错误: ' + err.message);
+    showError(err.message);
     console.error(err);
   } finally {
     setLoading(btnGenerateManual, false);
