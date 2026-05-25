@@ -31,7 +31,7 @@ def get_client() -> Optional["OpenAI"]:
             "未找到 DEEPSEEK_API_KEY 环境变量。\n"
             "请设置: export DEEPSEEK_API_KEY='your-key'"
         )
-    return OpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
+    return OpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL, timeout=120.0)
 
 
 def chat_completion(
@@ -137,6 +137,7 @@ def expand_persona(user_input: str) -> dict:
     """
     根据用户简要输入，用 LLM 自动扩展生成完整的五层框架 persona 细节。
     返回 JSON 格式的结构化数据。
+    使用 deepseek-v4-flash 模型（快速且足够好）。
     """
     system_prompt = """你是一位资深用户研究专家，擅长基于「五层设计框架」构建虚拟用户。
 
@@ -172,13 +173,14 @@ def expand_persona(user_input: str) -> dict:
         {"role": "user", "content": f"请基于以下描述生成完整的虚拟用户定义：\n\n{user_input}"}
     ]
     
-    return chat_completion_json(messages, temperature=0.7)
+    return chat_completion_json(messages, model=DEEPSEEK_MODEL_FLASH, temperature=0.7)
 
 
 def optimize_system_prompt(raw_prompt: str) -> str:
     """
     用 LLM 优化 System Prompt，让它更有"人味"、更自然、更严格。
     防止 LLM 过于配合，确保角色行为一致。
+    使用 deepseek-v4-flash 模型（快速且足够好）。
     """
     system_prompt = """你是一位顶尖的 prompt engineering 专家，专门优化 LLM 角色扮演的 System Prompt。
 
@@ -200,13 +202,14 @@ def optimize_system_prompt(raw_prompt: str) -> str:
         {"role": "user", "content": f"请优化以下 System Prompt：\n\n{raw_prompt}"}
     ]
     
-    return chat_completion(messages, temperature=0.8)
+    return chat_completion(messages, model=DEEPSEEK_MODEL_FLASH, temperature=0.8)
 
 
 def critique_prompt(system_prompt: str) -> dict:
     """
     用 LLM 对 System Prompt 做 Self-Critique，评估质量并给出改进建议。
     返回 JSON：{"score": 1-10, "issues": [...], "suggestions": [...]}
+    使用 deepseek-v4-flash 模型（快速且足够好）。
     """
     system_prompt_text = """你是一位严格的 prompt quality reviewer，专门评估虚拟用户的 System Prompt 质量。
 
@@ -230,4 +233,4 @@ def critique_prompt(system_prompt: str) -> dict:
         {"role": "user", "content": f"请评估以下 System Prompt 的质量：\n\n{system_prompt}"}
     ]
     
-    return chat_completion_json(messages, temperature=0.3)
+    return chat_completion_json(messages, model=DEEPSEEK_MODEL_FLASH, temperature=0.3)

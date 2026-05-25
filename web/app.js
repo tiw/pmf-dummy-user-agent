@@ -79,12 +79,15 @@ function showError(msg) {
   results.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function setLoading(btn, isLoading) {
+function setLoading(btn, isLoading, stageText) {
   const text = btn.querySelector('.btn-text');
   const loading = btn.querySelector('.btn-loading');
   btn.disabled = isLoading;
   text.classList.toggle('hidden', isLoading);
   loading.classList.toggle('hidden', !isLoading);
+  if (stageText && loading) {
+    loading.textContent = stageText;
+  }
 }
 
 function escapeHtml(str) {
@@ -169,7 +172,7 @@ async function generateLlm() {
     return;
   }
 
-  setLoading(btnGenerateLlm, true);
+  setLoading(btnGenerateLlm, true, '正在扩展 persona 细节...');
   try {
     const res = await fetch(`${API_BASE}/api/generate`, {
       method: 'POST',
@@ -241,7 +244,7 @@ async function generateManual() {
     },
   };
 
-  setLoading(btnGenerateManual, true);
+  setLoading(btnGenerateManual, true, '正在生成并优化...');
   try {
     const res = await fetch(`${API_BASE}/api/generate`, {
       method: 'POST',
