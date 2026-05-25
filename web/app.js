@@ -14,7 +14,6 @@ const btnDownloadYaml = document.getElementById('btn-download-yaml');
 const btnDownloadMd = document.getElementById('btn-download-md');
 const results = document.getElementById('results');
 const toast = document.getElementById('toast');
-const results = document.getElementById('results');
 
 let currentResult = null;
 
