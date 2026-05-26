@@ -16,7 +16,7 @@ from typing import List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Import local modules
 from deepseek_client import (
@@ -292,6 +292,268 @@ async def generate(req: LlmGenerateRequest):
         "behavior": behavior,
         "system_prompt": system_prompt,
         "critique": critique,
+    }
+
+
+# ═══════════════════════════════════════════════
+# VMU API Routes (v1)
+# ═══════════════════════════════════════════════
+
+from vmu import PersonaManager, PersonaAgent
+from vmu.models import (
+    Demographics, Psychographics, BehavioralTraits,
+    Context, SceneContext, BehaviorEngine,
+    SceneParticipant,
+)
+
+manager = PersonaManager()
+
+# ─── Helper ───
+
+def _inst_to_dict(inst):
+    """将 PersonaInstance 转为可 JSON 序列化的 dict"""
+    d = inst.model_dump()
+    # message_history 可能很长，截断预览
+    if "message_history" in d:
+        d["message_history_count"] = len(d["message_history"])
+        d["message_history_preview"] = [
+            {"role": m["role"], "content": m["content"][:200]}
+            for m in d["message_history"][-5:]
+        ]
+    return d
+
+
+# ─── PersonaType ───
+
+class TypeCreateRequest(BaseModel):
+    type_id: str
+    name: str
+    description: str = ""
+    demographics: Optional[dict] = None
+    psychographics: Optional[dict] = None
+    behavioral_traits: Optional[dict] = None
+    context: Optional[dict] = None
+    scene_context: Optional[dict] = None
+    behavior_engine: Optional[dict] = None
+    system_prompt_template: str = ""
+    variation_config: Optional[dict] = None
+
+
+class TypeUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    demographics: Optional[dict] = None
+    psychographics: Optional[dict] = None
+    behavioral_traits: Optional[dict] = None
+    context: Optional[dict] = None
+    scene_context: Optional[dict] = None
+    behavior_engine: Optional[dict] = None
+    system_prompt_template: Optional[str] = None
+    variation_config: Optional[dict] = None
+
+
+@app.get("/api/v1/types")
+async def list_types():
+    return {"types": [pt.model_dump() for pt in manager.list_types()]}
+
+
+@app.post("/api/v1/types")
+async def create_type(req: TypeCreateRequest):
+    pt = manager.create_type(
+        type_id=req.type_id,
+        name=req.name,
+        description=req.description,
+        demographics=Demographics(**req.demographics) if req.demographics else None,
+        psychographics=Psychographics(**req.psychographics) if req.psychographics else None,
+        behavioral_traits=BehavioralTraits(**req.behavioral_traits) if req.behavioral_traits else None,
+        context=Context(**req.context) if req.context else None,
+        scene_context=SceneContext(**req.scene_context) if req.scene_context else None,
+        behavior_engine=BehaviorEngine(**req.behavior_engine) if req.behavior_engine else None,
+        system_prompt_template=req.system_prompt_template,
+        variation_config=req.variation_config or {},
+    )
+    return {"type": pt.model_dump()}
+
+
+@app.get("/api/v1/types/{type_id}")
+async def get_type(type_id: str):
+    pt = manager.get_type(type_id)
+    if not pt:
+        raise HTTPException(status_code=404, detail="Type not found")
+    return {"type": pt.model_dump()}
+
+
+@app.put("/api/v1/types/{type_id}")
+async def update_type(type_id: str, req: TypeUpdateRequest):
+    pt = manager.get_type(type_id)
+    if not pt:
+        raise HTTPException(status_code=404, detail="Type not found")
+    updates = req.model_dump(exclude_unset=True)
+    if not updates:
+        return {"type": pt.model_dump()}
+    updated = manager.update_type(type_id, **updates)
+    return {"type": updated.model_dump() if updated else None}
+
+
+@app.delete("/api/v1/types/{type_id}")
+async def delete_type(type_id: str):
+    ok = manager.delete_type(type_id)
+    return {"deleted": ok}
+
+
+# ─── PersonaInstance ───
+
+class InstanceCreateRequest(BaseModel):
+    type_id: str
+    name: Optional[str] = None
+    variation: Optional[dict] = None
+    variation_seed: Optional[int] = None
+
+
+@app.get("/api/v1/instances")
+async def list_instances(type_id: Optional[str] = None):
+    instances = manager.list_instances(type_id)
+    return {"instances": [_inst_to_dict(i) for i in instances]}
+
+
+@app.post("/api/v1/instances")
+async def create_instance(req: InstanceCreateRequest):
+    inst = manager.instantiate(
+        type_id=req.type_id,
+        name=req.name,
+        variation=req.variation,
+        variation_seed=req.variation_seed,
+    )
+    if not inst:
+        raise HTTPException(status_code=404, detail="Type not found")
+    return {"instance": _inst_to_dict(inst)}
+
+
+@app.get("/api/v1/instances/{instance_id}")
+async def get_instance(instance_id: str):
+    inst = manager.get_instance(instance_id)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    return {"instance": _inst_to_dict(inst)}
+
+
+@app.delete("/api/v1/instances/{instance_id}")
+async def delete_instance(instance_id: str):
+    ok = manager.delete_instance(instance_id)
+    return {"deleted": ok}
+
+
+# ─── Instance Interaction ───
+
+class InteractRequest(BaseModel):
+    message: str
+    include_history: bool = True
+    temperature: float = 0.7
+
+
+@app.post("/api/v1/instances/{instance_id}/interact")
+async def interact(instance_id: str, req: InteractRequest):
+    inst = manager.get_instance(instance_id)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    
+    from deepseek_client import chat_completion
+    agent = PersonaAgent(
+        instance=inst,
+        llm_client=chat_completion,
+        auto_persist=True,
+        storage=manager.storage,
+    )
+    try:
+        result = agent.interact(
+            req.message,
+            include_history=req.include_history,
+            temperature=req.temperature,
+        )
+        return {
+            "instance_id": result.instance_id,
+            "response": result.response,
+            "memory": result.updated_memory.model_dump() if result.updated_memory else None,
+            "metadata": result.metadata,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLM interaction failed: {str(e)}")
+
+
+# ─── Scene ───
+
+class SceneCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    scenario: str = ""
+    participant_configs: List[dict] = Field(default_factory=list)
+    shared_context: Optional[dict] = None
+
+
+@app.get("/api/v1/scenes")
+async def list_scenes():
+    return {"scenes": [s.model_dump() for s in manager.list_scenes()]}
+
+
+@app.post("/api/v1/scenes")
+async def create_scene(req: SceneCreateRequest):
+    configs = [SceneParticipant(**c) for c in req.participant_configs]
+    scene = manager.create_scene(
+        name=req.name,
+        description=req.description,
+        scenario=req.scenario,
+        participant_configs=configs,
+        shared_context=req.shared_context or {},
+    )
+    return {"scene": scene.model_dump()}
+
+
+@app.get("/api/v1/scenes/{scene_id}")
+async def get_scene(scene_id: str):
+    scene = manager.get_scene(scene_id)
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    # 同时返回参与者详情
+    participants = manager.get_scene_instances(scene_id)
+    data = scene.model_dump()
+    data["participants"] = [_inst_to_dict(p) for p in participants]
+    return {"scene": data}
+
+
+@app.post("/api/v1/scenes/{scene_id}/instantiate")
+async def instantiate_scene(scene_id: str):
+    scene = manager.instantiate_scene(scene_id)
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    participants = manager.get_scene_instances(scene_id)
+    return {
+        "scene": scene.model_dump(),
+        "participants": [_inst_to_dict(p) for p in participants],
+    }
+
+
+@app.delete("/api/v1/scenes/{scene_id}")
+async def delete_scene(scene_id: str):
+    ok = manager.delete_scene(scene_id)
+    return {"deleted": ok}
+
+
+# ─── Presets ───
+
+@app.post("/api/v1/presets")
+async def create_presets():
+    types = manager.create_preset_types()
+    return {"types": [pt.model_dump() for pt in types]}
+
+
+# ─── Dashboard Stats ───
+
+@app.get("/api/v1/stats")
+async def get_stats():
+    return {
+        "types": len(manager.list_types()),
+        "instances": len(manager.list_instances()),
+        "scenes": len(manager.list_scenes()),
     }
 
 

@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VMU Dashboard — 虚拟人管理</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --surface-hover: #f8f9fa;
+      --ink: #1a1d23;
+      --ink-secondary: #4a5568;
+      --ink-tertiary: #718096;
+      --border: #e2e8f0;
+      --border-light: #edf2f7;
+      --primary: #3182ce;
+      --primary-hover: #2b6cb0;
+      --primary-soft: #ebf8ff;
+      --success: #38a169;
+      --success-soft: #f0fff4;
+      --warning: #d69e2e;
+      --warning-soft: #fffaf0;
+      --danger: #e53e3e;
+      --danger-soft: #fff5f5;
+      --radius: 10px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
+      --shadow: 0 4px 12px rgba(0,0,0,0.06);
+      --shadow-lg: 0 10px 30px rgba(0,0,0,0.08);
+      --sidebar-width: 220px;
+      --header-height: 56px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+
+    /* Layout */
+    .app { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-brand {
+      height: var(--header-height);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--border-light);
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--ink);
+      gap: 8px;
+    }
+    .sidebar-brand .glyph { color: var(--primary); font-size: 18px; }
+    .sidebar-nav { flex: 1; padding: 12px 10px; }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      color: var(--ink-secondary);
+      font-size: 13.5px;
+      font-weight: 500;
+      transition: all .15s;
+      margin-bottom: 2px;
+    }
+    .nav-item:hover { background: var(--surface-hover); color: var(--ink); }
+    .nav-item.active { background: var(--primary-soft); color: var(--primary); }
+    .nav-item .icon { width: 18px; text-align: center; font-size: 15px; }
+    .sidebar-footer {
+      padding: 14px;
+      border-top: 1px solid var(--border-light);
+      font-size: 11px;
+      color: var(--ink-tertiary);
+      text-align: center;
+    }
+
+    .main {
+      flex: 1;
+      margin-left: var(--sidebar-width);
+      min-height: 100vh;
+    }
+    .header {
+      height: var(--header-height);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .header-title { font-size: 16px; font-weight: 600; }
+    .header-actions { display: flex; gap: 10px; }
+
+    .content { padding: 24px 28px 40px; max-width: 1200px; }
+
+    /* Components */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .15s;
+      font-family: inherit;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary { background: var(--surface); color: var(--ink-secondary); border-color: var(--border); }
+    .btn-secondary:hover { background: var(--surface-hover); }
+    .btn-danger { background: var(--danger-soft); color: var(--danger); }
+    .btn-danger:hover { background: var(--danger); color: #fff; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+    }
+    .card-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-light);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-title { font-size: 14px; font-weight: 600; }
+    .card-body { padding: 20px; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .stat-value { font-size: 28px; font-weight: 700; color: var(--ink); line-height: 1; margin-bottom: 6px; }
+    .stat-label { font-size: 12px; color: var(--ink-tertiary); font-weight: 500; }
+    .stat-card.primary { border-left: 3px solid var(--primary); }
+    .stat-card.success { border-left: 3px solid var(--success); }
+    .stat-card.warning { border-left: 3px solid var(--warning); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border-light); }
+    th { font-weight: 600; color: var(--ink-secondary); font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px; background: var(--surface-hover); }
+    tr:hover td { background: var(--surface-hover); }
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .tag-blue { background: var(--primary-soft); color: var(--primary); }
+    .tag-green { background: var(--success-soft); color: var(--success); }
+    .tag-orange { background: var(--warning-soft); color: var(--warning); }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--ink-tertiary);
+    }
+    .empty-state .icon { font-size: 40px; margin-bottom: 12px; opacity: .5; }
+    .empty-state h3 { font-size: 15px; color: var(--ink-secondary); margin-bottom: 6px; }
+    .empty-state p { font-size: 13px; }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.35);
+      z-index: 200;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: var(--surface);
+      border-radius: var(--radius);
+      width: 100%;
+      max-width: 560px;
+      max-height: 90vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-lg);
+    }
+    .modal-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border-light);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-header h3 { font-size: 15px; font-weight: 600; }
+    .modal-close { cursor: pointer; color: var(--ink-tertiary); font-size: 20px; line-height: 1; padding: 4px; }
+    .modal-close:hover { color: var(--ink); }
+    .modal-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
+    .modal-footer {
+      padding: 14px 24px;
+      border-top: 1px solid var(--border-light);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .form-group { margin-bottom: 16px; }
+    .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-secondary); margin-bottom: 6px; }
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: inherit;
+      background: var(--surface);
+      color: var(--ink);
+      transition: border .15s;
+    }
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-soft);
+    }
+    .form-textarea { min-height: 80px; resize: vertical; }
+    .form-hint { font-size: 11px; color: var(--ink-tertiary); margin-top: 4px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+    /* Chat */
+    .chat-container {
+      display: flex;
+      flex-direction: column;
+      height: 520px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .chat-bubble {
+      max-width: 80%;
+      padding: 12px 16px;
+      border-radius: 14px;
+      font-size: 13.5px;
+      line-height: 1.6;
+      word-break: break-word;
+    }
+    .chat-bubble.user {
+      align-self: flex-end;
+      background: var(--primary);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .chat-bubble.assistant {
+      align-self: flex-start;
+      background: var(--bg);
+      color: var(--ink);
+      border-bottom-left-radius: 4px;
+      border: 1px solid var(--border-light);
+    }
+    .chat-meta { font-size: 11px; color: var(--ink-tertiary); margin-top: 4px; }
+    .chat-input-bar {
+      display: flex;
+      gap: 10px;
+      padding: 14px 18px;
+      border-top: 1px solid var(--border-light);
+    }
+    .chat-input-bar input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .chat-input-bar input:focus { outline: none; border-color: var(--primary); }
+    .chat-instance-item:hover { background: var(--surface-hover); }
+    .chat-instance-item.active { background: var(--primary-soft); }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .section-subtitle {
+      font-size: 13px;
+      color: var(--ink-tertiary);
+      margin-bottom: 20px;
+    }
+
+    .prompt-preview {
+      background: #1a1d23;
+      color: #e2e8f0;
+      padding: 16px;
+      border-radius: 8px;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      max-height: 400px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--ink);
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      box-shadow: var(--shadow-lg);
+      z-index: 300;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all .3s;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.success { background: var(--success); }
+    .toast.error { background: var(--danger); }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .hidden { display: none !important; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+    .tab {
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink-tertiary);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .tab:hover { color: var(--ink-secondary); }
+    .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    /* Accordion in detail */
+    .detail-section { margin-bottom: 20px; }
+    .detail-section-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--ink-secondary);
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-bottom: 10px;
+    }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .detail-item {
+      background: var(--bg);
+      padding: 12px 14px;
+      border-radius: 8px;
+    }
+    .detail-item-label { font-size: 11px; color: var(--ink-tertiary); margin-bottom: 3px; }
+    .detail-item-value { font-size: 13px; font-weight: 500; color: var(--ink); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="glyph">◈</span>
+        <span>PersonaForge</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-item active" data-page="dashboard">
+          <span class="icon">▣</span> 仪表盘
+        </div>
+        <div class="nav-item" data-page="types">
+          <span class="icon">◉</span> 人格类型
+        </div>
+        <div class="nav-item" data-page="scenes">
+          <span class="icon">▥</span> 场景管理
+        </div>
+        <div class="nav-item" data-page="instances">
+          <span class="icon">◎</span> 实例管理
+        </div>
+        <div class="nav-item" data-page="chat">
+          <span class="icon">✉</span> 对话测试
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        VMU v1.0
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <header class="header">
+        <div class="header-title" id="page-title">仪表盘</div>
+        <div class="header-actions">
+          <a href="/" class="btn btn-secondary btn-sm">↩ 返回生成器</a>
+        </div>
+      </header>
+
+      <div class="content">
+        <!-- Dashboard -->
+        <div class="page active" id="page-dashboard">
+          <div class="section-title">仪表盘</div>
+          <div class="section-subtitle">虚拟人系统概览</div>
+          <div class="stats-grid">
+            <div class="stat-card primary">
+              <div class="stat-value" id="stat-types">—</div>
+              <div class="stat-label">人格类型</div>
+            </div>
+            <div class="stat-card success">
+              <div class="stat-value" id="stat-instances">—</div>
+              <div class="stat-label">实例数量</div>
+            </div>
+            <div class="stat-card warning">
+              <div class="stat-value" id="stat-scenes">—</div>
+              <div class="stat-label">场景数量</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">快速开始</span>
+            </div>
+            <div class="card-body">
+              <p style="margin-bottom:14px;color:var(--ink-secondary);">
+                首次使用？一键创建 4 种预设人格类型，然后创建场景并开始对话测试。
+              </p>
+              <button class="btn btn-primary" id="btn-init-presets">
+                <span>✦</span> 创建预设类型
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Types -->
+        <div class="page" id="page-types">
+          <div class="section-title">人格类型</div>
+          <div class="section-subtitle">定义虚拟人的基础模板，同类型可生成多个差异化实例</div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">类型列表</span>
+              <button class="btn btn-primary btn-sm" id="btn-new-type">+ 新建类型</button>
+            </div>
+            <div class="card-body" id="types-table-container">
+              <div class="empty-state">
+                <div class="icon">◉</div>
+                <h3>暂无类型</h3>
+                <p>点击「创建预设类型」或「新建类型」开始</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scenes -->
+        <div class="page" id="page-scenes">
+          <div class="section-title">场景管理</div>
+          <div class="section-subtitle">创建场景，配置参与者，一键实例化多个虚拟人</div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">场景列表</span>
+              <button class="btn btn-primary btn-sm" id="btn-new-scene">+ 新建场景</button>
+            </div>
+            <div class="card-body" id="scenes-table-container">
+              <div class="empty-state">
+                <div class="icon">▥</div>
+                <h3>暂无场景</h3>
+                <p>创建场景来组织虚拟人交互</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Instances -->
+        <div class="page" id="page-instances">
+          <div class="section-title">实例管理</div>
+          <div class="section-subtitle">查看和管理所有已生成的虚拟人实例</div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">实例列表</span>
+              <button class="btn btn-primary btn-sm" id="btn-new-instance">+ 新建实例</button>
+            </div>
+            <div class="card-body" id="instances-table-container">
+              <div class="empty-state">
+                <div class="icon">◎</div>
+                <h3>暂无实例</h3>
+                <p>通过场景实例化或手动创建</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat -->
+        <div class="page" id="page-chat">
+          <div class="section-title">对话测试</div>
+          <div class="section-subtitle">选择虚拟人实例，进行实时 LLM 对话</div>
+          <div style="display:grid;grid-template-columns:280px 1fr;gap:20px;">
+            <div class="card" style="max-height:520px;overflow-y:auto;">
+              <div class="card-header">
+                <span class="card-title">选择实例</span>
+              </div>
+              <div class="card-body" id="chat-instance-list" style="padding:10px;">
+                <div class="empty-state" style="padding:30px 10px;">
+                  <p>暂无可用实例</p>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="chat-container" id="chat-box">
+                <div class="chat-messages" id="chat-messages">
+                  <div class="empty-state" style="padding-top:120px;">
+                    <div class="icon">✉</div>
+                    <h3>选择左侧实例开始对话</h3>
+                  </div>
+                </div>
+                <div class="chat-input-bar">
+                  <input type="text" id="chat-input" placeholder="输入消息..." disabled>
+                  <button class="btn btn-primary" id="chat-send" disabled>发送</button>
+                </div>
+              </div>
+              <div id="chat-instance-info" style="margin-top:12px;font-size:12px;color:var(--ink-tertiary);"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <!-- Modal: Create Type -->
+  <div class="modal-overlay" id="modal-type">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>新建人格类型</h3>
+        <span class="modal-close" data-close="modal-type">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">类型 ID *</label>
+          <input class="form-input" id="type-id" placeholder="如 anxious_buyer">
+          <div class="form-hint">唯一标识，英文+下划线</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">名称 *</label>
+          <input class="form-input" id="type-name" placeholder="如 焦虑型买家">
+        </div>
+        <div class="form-group">
+          <label class="form-label">描述</label>
+          <textarea class="form-textarea" id="type-desc" placeholder="描述这类人的特征..."></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">角色</label>
+            <input class="form-input" id="type-role" value="用户">
+          </div>
+          <div class="form-group">
+            <label class="form-label">年龄</label>
+            <input class="form-input" id="type-age" type="number" value="30">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">怀疑度 (0-1)</label>
+            <input class="form-input" id="type-skepticism" type="number" step="0.1" min="0" max="1" value="0.5">
+          </div>
+          <div class="form-group">
+            <label class="form-label">价格敏感度 (0-1)</label>
+            <input class="form-input" id="type-price" type="number" step="0.1" min="0" max="1" value="0.5">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modal-type">取消</button>
+        <button class="btn btn-primary" id="btn-save-type">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Create Scene -->
+  <div class="modal-overlay" id="modal-scene">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>新建场景</h3>
+        <span class="modal-close" data-close="modal-scene">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">场景名称 *</label>
+          <input class="form-input" id="scene-name" placeholder="如 B2B SaaS 产品演示会">
+        </div>
+        <div class="form-group">
+          <label class="form-label">描述</label>
+          <input class="form-input" id="scene-desc" placeholder="简短描述">
+        </div>
+        <div class="form-group">
+          <label class="form-label">场景剧本</label>
+          <textarea class="form-textarea" id="scene-scenario" placeholder="描述场景背景..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">参与者配置</label>
+          <div id="scene-participants-list"></div>
+          <button class="btn btn-secondary btn-sm" id="btn-add-participant" style="margin-top:8px;">+ 添加参与者</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modal-scene">取消</button>
+        <button class="btn btn-primary" id="btn-save-scene">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Create Instance -->
+  <div class="modal-overlay" id="modal-instance">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>新建实例</h3>
+        <span class="modal-close" data-close="modal-instance">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">选择类型 *</label>
+          <select class="form-select" id="instance-type-id"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">名称（可选）</label>
+          <input class="form-input" id="instance-name" placeholder="自动分配">
+        </div>
+        <div class="form-group">
+          <label class="form-label">随机种子（可选）</label>
+          <input class="form-input" id="instance-seed" type="number" placeholder="留空则随机">
+          <div class="form-hint">相同种子生成相同差异参数的实例</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modal-instance">取消</button>
+        <button class="btn btn-primary" id="btn-save-instance">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Instance Detail -->
+  <div class="modal-overlay" id="modal-detail">
+    <div class="modal" style="max-width:720px;">
+      <div class="modal-header">
+        <h3 id="detail-title">实例详情</h3>
+        <span class="modal-close" data-close="modal-detail">&times;</span>
+      </div>
+      <div class="modal-body" id="detail-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modal-detail">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>
