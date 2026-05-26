@@ -92,6 +92,7 @@ $('btn-init-presets').addEventListener('click', async () => {
     await apiPost('/presets');
     toast('预设类型创建成功', 'success');
     loadDashboard();
+    await loadTypes();  // 同步更新 state.types，解除后续页面 Guard
   } catch (e) {
     toast('创建失败: ' + e.message, 'error');
   } finally {
