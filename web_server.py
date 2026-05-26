@@ -182,8 +182,8 @@ def _build_raw_system_prompt(persona: dict, scene: dict, behavior: dict, memory:
 
 @app.post("/api/generate")
 async def generate(req: LlmGenerateRequest):
-    if not os.environ.get("DEEPSEEK_API_KEY"):
-        raise HTTPException(status_code=500, detail="未配置 DEEPSEEK_API_KEY 环境变量")
+    if not os.environ.get("DASHSCOPE_API_KEY") and not os.environ.get("DEEPSEEK_API_KEY"):
+        raise HTTPException(status_code=500, detail="未配置 LLM API Key，请设置 DASHSCOPE_API_KEY 或 DEEPSEEK_API_KEY")
 
     product_name = req.product_name or "产品"
     product_type = req.product_type or "SaaS"

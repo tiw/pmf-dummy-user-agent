@@ -634,14 +634,20 @@ INFO_GUIDE = """
 # ───────────────────────────────────────────────
 
 def check_api_key():
-    """检查 DEEPSEEK_API_KEY 是否配置。"""
-    if not os.environ.get("DEEPSEEK_API_KEY"):
-        print("❌ 未找到 DEEPSEEK_API_KEY 环境变量")
-        print("   请设置: export DEEPSEEK_API_KEY='your-api-key'")
-        print()
-        print("没有 API Key 也能运行，但只能使用手动模式（无 LLM 增强）")
-        return False
-    return True
+    """检查 LLM API Key 是否配置（支持 DashScope/Qwen 或 DeepSeek）。"""
+    if os.environ.get("DASHSCOPE_API_KEY"):
+        print("✅ 检测到 DASHSCOPE_API_KEY，将使用 Qwen 模型")
+        return True
+    if os.environ.get("DEEPSEEK_API_KEY"):
+        print("✅ 检测到 DEEPSEEK_API_KEY，将使用 DeepSeek 模型")
+        return True
+    print("❌ 未找到 LLM API Key 环境变量")
+    print("   请设置其中之一:")
+    print("     export DASHSCOPE_API_KEY='your-key'   (Qwen/通义千问)")
+    print("     export DEEPSEEK_API_KEY='your-key'    (DeepSeek)")
+    print()
+    print("没有 API Key 也能运行，但只能使用手动模式（无 LLM 增强）")
+    return False
 
 
 def main():

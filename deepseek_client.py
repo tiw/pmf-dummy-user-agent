@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-DeepSeek API 客户端封装
-兼容 OpenAI API 格式
+LLM API 客户端封装
+支持 DeepSeek 和 Qwen (DashScope) 两种后端
+兼容 OpenAI API 格式，通过环境变量自动选择 provider
 """
 
 import os
@@ -14,24 +15,68 @@ except ImportError:
     OpenAI = None
 
 
+# ─── Provider 配置 ───
+
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_MODEL_PRO = "deepseek-v4-pro"
 DEEPSEEK_MODEL_FLASH = "deepseek-v4-flash"
 
+DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+QWEN_MODEL_PRO = "qwen3.7-max"
+QWEN_MODEL_FLASH = "qwen3.7-max"
 
-def get_client() -> Optional["OpenAI"]:
-    """获取 DeepSeek API 客户端。"""
+
+def _detect_provider() -> str:
+    """根据环境变量自动检测使用哪个 provider。优先 DASHSCOPE。"""
+    if os.environ.get("DASHSCOPE_API_KEY"):
+        return "qwen"
+    if os.environ.get("DEEPSEEK_API_KEY"):
+        return "deepseek"
+    return "none"
+
+
+def get_client():
+    """获取 LLM API 客户端，自动选择 DeepSeek 或 Qwen。"""
     if OpenAI is None:
         raise RuntimeError(
             "缺少 openai 依赖。请运行: pip install openai"
         )
-    api_key = os.environ.get("DEEPSEEK_API_KEY")
-    if not api_key:
+    provider = _detect_provider()
+    if provider == "qwen":
+        api_key = os.environ["DASHSCOPE_API_KEY"]
+        return OpenAI(api_key=api_key, base_url=DASHSCOPE_BASE_URL, timeout=120.0)
+    elif provider == "deepseek":
+        api_key = os.environ["DEEPSEEK_API_KEY"]
+        return OpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL, timeout=120.0)
+    else:
         raise RuntimeError(
-            "未找到 DEEPSEEK_API_KEY 环境变量。\n"
-            "请设置: export DEEPSEEK_API_KEY='your-key'"
+            "未找到 LLM API Key 环境变量。\n"
+            "请设置其中之一:\n"
+            "  export DASHSCOPE_API_KEY='your-key'   (Qwen/通义千问)\n"
+            "  export DEEPSEEK_API_KEY='your-key'    (DeepSeek)"
         )
-    return OpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL, timeout=120.0)
+
+
+
+
+def _resolve_model(model: str) -> str:
+    """将传入的模型名解析为当前 provider 对应的模型。
+
+    如果传入的是 DeepSeek 模型名但当前 provider 是 Qwen，自动映射。
+    """
+    provider = _detect_provider()
+    if provider == "qwen":
+        # 映射 DeepSeek 模型名到 Qwen 模型名
+        mapping = {
+            DEEPSEEK_MODEL_PRO: QWEN_MODEL_PRO,
+            DEEPSEEK_MODEL_FLASH: QWEN_MODEL_FLASH,
+            "deepseek-v4-pro": QWEN_MODEL_PRO,
+            "deepseek-v4-flash": QWEN_MODEL_FLASH,
+            "qwen-plus": QWEN_MODEL_PRO,
+            "qwen-turbo": QWEN_MODEL_FLASH,
+        }
+        return mapping.get(model, QWEN_MODEL_PRO)
+    return model
 
 
 def chat_completion(
@@ -44,44 +89,45 @@ def chat_completion(
     reasoning_effort: str = "medium",
 ) -> str:
     """
-    调用 DeepSeek Chat Completion API。
-    
+    调用 LLM Chat Completion API（自动选择 DeepSeek 或 Qwen）。
+
     Args:
         messages: 消息列表，格式 [{"role": "system"/"user"/"assistant", "content": "..."}]
-        model: 模型名称，默认 deepseek-v4-pro
+        model: 模型名称（会自动映射到当前 provider 对应模型）
         temperature: 创造性温度，0-2
         max_tokens: 最大输出 token 数
         stream: 是否流式输出
-        thinking: 是否启用思考模式（reasoning）
+        thinking: 是否启用思考模式（仅 DeepSeek 支持）
         reasoning_effort: 思考努力程度: low/medium/high
-    
+
     Returns:
         模型的文本回复内容
     """
     client = get_client()
-    
+    resolved_model = _resolve_model(model)
+
     kwargs = {
-        "model": model,
+        "model": resolved_model,
         "messages": messages,
         "temperature": temperature,
         "stream": stream,
     }
     if max_tokens:
         kwargs["max_tokens"] = max_tokens
-    if thinking:
+    # thinking 模式仅 DeepSeek 支持
+    if thinking and _detect_provider() == "deepseek":
         kwargs["thinking"] = {"type": "enabled"}
         kwargs["reasoning_effort"] = reasoning_effort
-    
+
     response = client.chat.completions.create(**kwargs)
-    
+
     if stream:
-        # 流式输出需要迭代处理，这里返回空字符串占位
         content = ""
         for chunk in response:
             if chunk.choices and chunk.choices[0].delta.content:
                 content += chunk.choices[0].delta.content
         return content
-    
+
     return response.choices[0].message.content
 
 
@@ -93,7 +139,7 @@ def chat_completion_json(
     thinking: bool = False,
 ) -> dict:
     """
-    调用 DeepSeek API，强制返回 JSON 格式。
+    调用 LLM API，强制返回 JSON 格式。
     在 messages 末尾自动追加 JSON 格式要求。
     """
     # 复制 messages 避免修改原列表
