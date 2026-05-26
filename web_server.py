@@ -595,6 +595,278 @@ async def get_stats():
     }
 
 
+# ═══════════════════════════════════════════════
+# Testing API Routes (v1)
+# 外部 Agent 调用虚拟人进行测试的接口
+# ═══════════════════════════════════════════════
+
+from vmu.testing import DummyUserTester, AgentAdapter, ConversationEvaluator, TestReport
+
+# 初始化测试器（复用同一个 manager）
+tester = DummyUserTester(manager=manager)
+
+
+class TestSessionCreateRequest(BaseModel):
+    persona_type: str
+    name: Optional[str] = None
+    scene_overrides: Optional[dict] = None
+    agent_info: Optional[dict] = Field(
+        default_factory=dict,
+        description="被测 agent 的信息，用于记录"
+    )
+
+
+class TestMessageRequest(BaseModel):
+    message: str
+    temperature: float = 0.7
+
+
+class TestRunRequest(BaseModel):
+    persona_type: str
+    name: Optional[str] = None
+    opening: Optional[str] = None
+    rounds: int = 5
+    temperature: float = 0.7
+    scene_overrides: Optional[dict] = None
+    agent_config: Optional[dict] = Field(
+        default_factory=dict,
+        description="agent 配置（仅用于记录）"
+    )
+
+
+class TestSceneRequest(BaseModel):
+    scene_id: str
+    opening: Optional[str] = None
+    rounds: int = 3
+    temperature: float = 0.7
+
+
+# ─── Session Management ───
+
+@app.post("/api/v1/testing/sessions")
+async def create_testing_session(req: TestSessionCreateRequest):
+    """创建一个交互式测试会话，返回 session_id"""
+    try:
+        session = tester.create_session(
+            agent=lambda msg: msg,  # 占位，实际 agent 通过 send 接口外部驱动
+            persona_type=req.persona_type,
+            name=req.name,
+            scene_overrides=req.scene_overrides,
+        )
+        return {
+            "session_id": session.session_id,
+            "persona": {
+                "instance_id": session.persona_instance.instance_id,
+                "name": session.persona_instance.name,
+                "type_id": session.persona_instance.type_id,
+            },
+            "status": session.status,
+            "created_at": session.created_at.isoformat(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建测试会话失败: {str(e)}")
+
+
+@app.get("/api/v1/testing/sessions")
+async def list_testing_sessions():
+    """列出所有活跃测试会话"""
+    sessions = tester.list_sessions()
+    return {
+        "sessions": [
+            {
+                "session_id": s.session_id,
+                "agent_name": s.agent_name,
+                "persona_name": s.persona_instance.name,
+                "type_id": s.persona_instance.type_id,
+                "status": s.status,
+                "total_turns": len(s.turns),
+                "created_at": s.created_at.isoformat(),
+            }
+            for s in sessions
+        ],
+        "total": len(sessions),
+    }
+
+
+@app.get("/api/v1/testing/sessions/{session_id}")
+async def get_testing_session(session_id: str):
+    """获取测试会话详情"""
+    session = tester.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"session": session.to_dict()}
+
+
+@app.post("/api/v1/testing/sessions/{session_id}/message")
+async def send_testing_message(session_id: str, req: TestMessageRequest):
+    """
+    向测试会话发送一条消息（agent → 虚拟人），返回虚拟人回复。
+
+    这是外部 agent 调用虚拟人的核心接口：
+    1. 外部 agent 把自己的回复发给虚拟人
+    2. 虚拟人根据角色设定进行回复
+    3. 返回虚拟人的回复给外部 agent
+    """
+    try:
+        response = tester.send_to_session(
+            session_id=session_id,
+            agent_message=req.message,
+            temperature=req.temperature,
+        )
+        session = tester.get_session(session_id)
+        return {
+            "session_id": session_id,
+            "user_response": response,
+            "persona_name": session.persona_instance.name if session else None,
+            "turn": len(session.turns) if session else 0,
+            "trust_level": session.persona_instance.memory.trust_level if session else None,
+            "emotional_state": session.persona_instance.memory.emotional_state if session else None,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"交互失败: {str(e)}")
+
+
+@app.post("/api/v1/testing/sessions/{session_id}/evaluate")
+async def evaluate_testing_session(session_id: str):
+    """对测试会话进行评估"""
+    session = tester.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    try:
+        evaluator = ConversationEvaluator()
+        evaluation = evaluator.evaluate(
+            persona=session.persona_instance,
+            turns=session.turns,
+            agent_name=session.agent_name,
+        )
+        return {
+            "session_id": session_id,
+            "evaluation": evaluation,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"评估失败: {str(e)}")
+
+
+@app.get("/api/v1/testing/sessions/{session_id}/report")
+async def get_testing_report(session_id: str, fmt: str = "json"):
+    """
+    获取测试报告。
+
+    fmt: json / markdown / console
+    """
+    session = tester.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    try:
+        report = TestReport.from_session(session)
+        if fmt == "markdown":
+            return {"format": "markdown", "content": report.to_markdown()}
+        elif fmt == "console":
+            return {"format": "console", "content": report.to_console()}
+        else:
+            return report.to_dict()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"生成报告失败: {str(e)}")
+
+
+@app.delete("/api/v1/testing/sessions/{session_id}")
+async def close_testing_session(session_id: str):
+    """关闭测试会话"""
+    ok = tester.close_session(session_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"closed": True, "session_id": session_id}
+
+
+# ─── Quick Test Run ───
+
+@app.post("/api/v1/testing/run")
+async def quick_test_run(req: TestRunRequest):
+    """
+    快速运行完整测试（非交互式）。
+
+    注意：这里需要一个 agent 函数来驱动对话。
+    由于 agent 在外部运行，此端点主要用于演示或配合 mock agent。
+    实际使用中，推荐用 sessions + message 接口进行交互式测试。
+    """
+    # 使用一个简单的 echo agent 作为占位
+    def echo_agent(msg: str) -> str:
+        return f"收到你的消息: {msg[:50]}..."
+
+    try:
+        session = tester.test_agent(
+            agent=echo_agent,
+            persona_type=req.persona_type,
+            name=req.name,
+            opening=req.opening,
+            rounds=req.rounds,
+            temperature=req.temperature,
+            scene_overrides=req.scene_overrides,
+        )
+
+        # 自动生成报告
+        report = TestReport.from_session(session)
+
+        return {
+            "session_id": session.session_id,
+            "status": session.status,
+            "turns": [
+                {
+                    "round": t.round_num,
+                    "agent": t.agent_message,
+                    "user": t.user_response,
+                }
+                for t in session.turns
+            ],
+            "report": report.to_dict(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"测试运行失败: {str(e)}")
+
+
+# ─── Scene-based Testing ───
+
+@app.post("/api/v1/testing/scene/{scene_id}/run")
+async def test_scene_run(scene_id: str, req: TestSceneRequest):
+    """在场景中运行测试（与多个虚拟人分别对话）"""
+    def echo_agent(msg: str) -> str:
+        return f"Agent回复: {msg[:50]}"
+
+    try:
+        sessions = tester.test_scene(
+            agent=echo_agent,
+            scene_id=scene_id,
+            opening=req.opening,
+            rounds=req.rounds,
+            temperature=req.temperature,
+        )
+
+        reports = []
+        for s in sessions:
+            report = TestReport.from_session(s)
+            reports.append({
+                "session_id": s.session_id,
+                "persona_name": s.persona_instance.name,
+                "type_id": s.persona_instance.type_id,
+                "turns_count": len(s.turns),
+                "evaluation": report.evaluation,
+            })
+
+        return {
+            "scene_id": scene_id,
+            "total_sessions": len(sessions),
+            "reports": reports,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"场景测试失败: {str(e)}")
+
+
 # Mount static files AFTER all API routes
 app.mount("/", StaticFiles(directory=str(web_dir), html=True), name="static")
 

@@ -267,19 +267,133 @@ JSON 格式，可直接查看和手动编辑。
 │   ├── storage.py            # JSON 持久化
 │   ├── manager.py            # 核心管理器（CRUD + 实例化）
 │   ├── agent.py              # LLM 交互 Agent
-│   └── prompts.py            # Prompt 渲染 + 变异生成
+│   ├── prompts.py            # Prompt 渲染 + 变异生成
+│   └── testing/              # 🆕 测试外部 Agent 模块
+│       ├── tester.py         #   测试引擎
+│       ├── adapters.py       #   Agent 适配器
+│       ├── evaluator.py      #   对话评估器
+│       └── report.py         #   测试报告
 ├── examples/
-│   └── run_scene.py          # 场景运行示例
+│   ├── run_scene.py          # 场景运行示例
+│   └── test_external_agent.py  # 🆕 测试外部 Agent 示例
 ├── data/                     # 持久化数据（运行时生成）
 ├── persona_generator.py      # CLI 单人生成（原有）
 ├── deepseek_client.py        # LLM API 封装（原有）
-├── web_server.py             # FastAPI Web 服务（原有）
+├── web_server.py             # FastAPI Web 服务（原有 + Testing API）
 ├── requirements.txt
 └── README.md
 ```
 
 ---
 
+## 🆕 模式四：用虚拟人测试外部 Agent
+
+pmf-dummy-user 不仅可以生成虚拟人，还可以作为「测试基础设施」，帮助其他 agent 完成测试。
+
+### 核心思路
+
+```
+你的 Agent ──▶ pmf-dummy-user ──▶ 虚拟人回复 ──▶ 你的 Agent
+    │                                    │
+    └──────────── 评估报告 ◀─────────────┘
+```
+
+### 方式一：Python SDK（推荐）
+
+```python
+from vmu.testing import DummyUserTester, AgentAdapter
+
+# 初始化测试器
+tester = DummyUserTester()
+
+# 测试一个函数型 agent
+def my_agent(message: str) -> str:
+    return "我是一个销售 agent，收到: " + message
+
+session = tester.test_agent(
+    agent=my_agent,
+    persona_type="anxious_buyer",  # 用焦虑型买家测试
+    opening="你好，我想了解一下你们的产品",
+    rounds=5,
+)
+
+# 查看对话
+for turn in session.turns:
+    print(f"Agent: {turn.agent_message}")
+    print(f"User:  {turn.user_response}")
+
+# 生成评估报告
+from vmu.testing import ConversationEvaluator, TestReport
+
+evaluator = ConversationEvaluator()
+report = TestReport.from_session(session)
+print(report.to_markdown())
+```
+
+### 方式二：测试 HTTP API 型 Agent
+
+```python
+# 连接你的 agent 服务
+adapter = AgentAdapter.http(
+    url="http://localhost:3000/chat",
+    message_field="message",
+    response_field="response",
+)
+
+session = tester.test_agent(agent=adapter, persona_type="rational_analyst", rounds=3)
+```
+
+### 方式三：交互式测试（HTTP API）
+
+启动服务：
+```bash
+python web_server.py
+```
+
+外部 agent 通过 API 逐步与虚拟人交互：
+
+```bash
+# 1. 创建测试会话
+curl -X POST http://localhost:8000/api/v1/testing/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"persona_type": "anxious_buyer"}'
+# 返回: {"session_id": "session_xxx", ...}
+
+# 2. 发送消息（agent → 虚拟人），返回虚拟人回复
+curl -X POST http://localhost:8000/api/v1/testing/sessions/session_xxx/message \
+  -H "Content-Type: application/json" \
+  -d '{"message": "你好，我是销售小李..."}'
+# 返回: {"user_response": "（虚拟人回复）", "trust_level": 0.3, ...}
+
+# 3. 获取评估报告
+curl http://localhost:8000/api/v1/testing/sessions/session_xxx/report
+
+# 4. 关闭会话
+curl -X DELETE http://localhost:8000/api/v1/testing/sessions/session_xxx
+```
+
+### Testing API 端点一览
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| POST | `/api/v1/testing/sessions` | 创建测试会话 |
+| GET | `/api/v1/testing/sessions` | 列出所有会话 |
+| GET | `/api/v1/testing/sessions/{id}` | 获取会话详情 |
+| POST | `/api/v1/testing/sessions/{id}/message` | 发送消息给虚拟人 |
+| POST | `/api/v1/testing/sessions/{id}/evaluate` | 评估对话质量 |
+| GET | `/api/v1/testing/sessions/{id}/report` | 获取测试报告 |
+| DELETE | `/api/v1/testing/sessions/{id}` | 关闭会话 |
+| POST | `/api/v1/testing/run` | 快速运行完整测试 |
+| POST | `/api/v1/testing/scene/{id}/run` | 场景测试（多虚拟人） |
+
+### 完整示例
+
+```bash
+python examples/test_external_agent.py
+```
+
+---
+
 ## 一句话总结
 
-> **虚拟用户 = 类型模板（PersonaType）× 差异化变异（Variation）+ 场景上下文（Scene）+ LLM Agent 交互。同类型可生成多个有差异的实例，统一管理、持久化、可交互。**
+> **虚拟用户 = 类型模板（PersonaType）× 差异化变异（Variation）+ 场景上下文（Scene）+ LLM Agent 交互。同类型可生成多个有差异的实例，统一管理、持久化、可交互。现在，这些虚拟人还可以作为「测试用户」，帮助外部 agent 完成自动化测试。**
