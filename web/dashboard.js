@@ -243,6 +243,10 @@ function renderScenesTable() {
 }
 
 $('btn-new-scene').addEventListener('click', () => {
+  if (state.types.length === 0) {
+    toast('请先创建人格类型（仪表盘 → 创建预设类型）', 'error');
+    return;
+  }
   openModal('modal-scene');
   renderParticipantSelectors();
 });
@@ -398,13 +402,22 @@ function renderInstancesTable() {
 
 $('btn-new-instance').addEventListener('click', () => {
   const sel = $('instance-type-id');
+  if (state.types.length === 0) {
+    toast('请先创建人格类型（仪表盘 → 创建预设类型）', 'error');
+    return;
+  }
   sel.innerHTML = state.types.map(t => `<option value="${t.type_id}">${t.name}</option>`).join('');
   openModal('modal-instance');
 });
 
 $('btn-save-instance').addEventListener('click', async () => {
+  const typeId = $('instance-type-id').value;
+  if (!typeId) {
+    toast('请选择人格类型', 'error');
+    return;
+  }
   const payload = {
-    type_id: $('instance-type-id').value,
+    type_id: typeId,
     name: $('instance-name').value.trim() || null,
     variation_seed: $('instance-seed').value ? parseInt($('instance-seed').value) : null,
   };
