@@ -44,6 +44,7 @@ class JsonStorage:
     def save(self, entity_type: str, entity_id: str, data: Dict[str, Any]):
         """保存实体"""
         path = self._path(entity_type, entity_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2, default=self._json_default)
     
