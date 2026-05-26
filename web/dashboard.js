@@ -618,3 +618,187 @@ function escapeHtml(str) {
 
 // ═══ Init ═══
 loadDashboard();
+
+// ═══ Group Chat ═══
+
+let groupChatState = {
+  mode: 'single',  // 'single' | 'group'
+  selectedSceneId: null,
+  groupMessages: [],  // {role, speaker, content, thinking?, decision?}
+};
+
+// Mode switching
+$('tab-single').addEventListener('click', () => switchChatMode('single'));
+$('tab-group').addEventListener('click', () => switchChatMode('group'));
+
+function switchChatMode(mode) {
+  groupChatState.mode = mode;
+  $('tab-single').classList.toggle('active', mode === 'single');
+  $('tab-group').classList.toggle('active', mode === 'group');
+  $('chat-single-mode').classList.toggle('hidden', mode !== 'single');
+  $('chat-group-mode').classList.toggle('hidden', mode !== 'group');
+  if (mode === 'group') {
+    loadGroupChatScenes();
+  }
+}
+
+// Group chat: load scenes
+async function loadGroupChatScenes() {
+  try {
+    const data = await apiGet('/scenes');
+    state.scenes = data.scenes || [];
+    renderGroupSceneList();
+  } catch (e) {
+    $('chat-scene-list').innerHTML = `<div class="empty-state" style="padding:30px 10px;"><p>加载失败</p></div>`;
+  }
+}
+
+function renderGroupSceneList() {
+  const container = $('chat-scene-list');
+  // 只显示已实例化的场景
+  const instantiated = state.scenes.filter(s => (s.participant_instance_ids || []).length > 0);
+  if (instantiated.length === 0) {
+    container.innerHTML = `<div class="empty-state" style="padding:30px 10px;"><p>暂无已实例化的场景<br><span style="font-size:11px;color:var(--ink-tertiary)">先去场景管理页面实例化一个场景</span></p></div>`;
+    return;
+  }
+  container.innerHTML = instantiated.map(s => `
+    <div class="group-scene-item ${groupChatState.selectedSceneId === s.scene_id ? 'active' : ''}"
+         data-id="${s.scene_id}"
+         style="padding:10px 12px;border-radius:8px;cursor:pointer;transition:background .15s;margin-bottom:2px;">
+      <div style="font-weight:600;font-size:13px;">${s.name}</div>
+      <div style="font-size:11px;color:var(--ink-tertiary);margin-top:2px;">
+        ${s.participant_instance_ids?.length || 0} 个参与者 · ${s.scenario || s.description || ''}
+      </div>
+    </div>
+  `).join('');
+  container.querySelectorAll('.group-scene-item').forEach(el => {
+    el.addEventListener('click', () => selectGroupScene(el.dataset.id));
+  });
+}
+
+async function selectGroupScene(sceneId) {
+  groupChatState.selectedSceneId = sceneId;
+  renderGroupSceneList();
+  groupChatState.groupMessages = [];
+  renderGroupChatMessages();
+
+  // Load scene participants
+  try {
+    const data = await apiGet('/scenes/' + sceneId);
+    const scene = data.scene;
+    const participants = scene.participants || [];
+
+    // Render member tags
+    const bar = $('group-members-bar');
+    bar.innerHTML = participants.map(p => `
+      <div class="group-member-tag">
+        <span class="dot" style="background:${stringToColor(p.type_id)}"></span>
+        <span>${p.name}</span>
+        <span style="color:var(--ink-tertiary);font-size:11px;">(${p.demographics?.role})</span>
+      </div>
+    `).join('');
+
+    $('group-chat-info').innerHTML = `当前群聊：<strong>${scene.name}</strong> · ${participants.length} 人`;
+    $('group-chat-input').disabled = false;
+    $('group-chat-send').disabled = false;
+  } catch (e) {
+    toast('加载场景失败: ' + e.message, 'error');
+  }
+}
+
+function stringToColor(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+  return '#' + '00000'.substring(0, 6 - c.length) + c;
+}
+
+function renderGroupChatMessages() {
+  const container = $('group-chat-messages');
+  if (groupChatState.groupMessages.length === 0) {
+    container.innerHTML = `<div class="empty-state" style="padding-top:80px;">
+      <div class="icon">✉</div>
+      <h3>选择左侧场景开始群聊</h3>
+      <p>群聊中每个虚拟人会先思考，再决定是否发言</p>
+    </div>`;
+    return;
+  }
+  container.innerHTML = groupChatState.groupMessages.map(msg => {
+    if (msg.role === 'user') {
+      return `<div class="chat-bubble user">${escapeHtml(msg.content)}</div>`;
+    }
+    if (msg.role === 'system') {
+      return `<div style="text-align:center;font-size:11px;color:var(--ink-tertiary);padding:4px 0;">${escapeHtml(msg.content)}</div>`;
+    }
+    if (msg.role === 'participant') {
+      if (msg.decision === 'PASS') {
+        return `<div class="chat-bubble group">
+          <div class="bubble-sender">${escapeHtml(msg.speaker)} <span class="tag tag-orange">PASS</span></div>
+          <div class="bubble-pass">思考：${escapeHtml(msg.thinking || '...')}</div>
+        </div>`;
+      }
+      return `<div class="chat-bubble group">
+        <div class="bubble-sender">${escapeHtml(msg.speaker)} <span class="tag tag-green">REPLY</span></div>
+        <div class="bubble-thinking">💭 ${escapeHtml(msg.thinking || '...')}</div>
+        <div>${escapeHtml(msg.content)}</div>
+      </div>`;
+    }
+    return '';
+  }).join('');
+  container.scrollTop = container.scrollHeight;
+}
+
+$('group-chat-send').addEventListener('click', sendGroupChat);
+$('group-chat-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendGroupChat(); }
+});
+
+async function sendGroupChat() {
+  const input = $('group-chat-input');
+  const msg = input.value.trim();
+  if (!msg || !groupChatState.selectedSceneId) return;
+  input.value = '';
+  input.disabled = true;
+  $('group-chat-send').disabled = true;
+
+  // Add user message
+  groupChatState.groupMessages.push({ role: 'user', content: msg });
+  renderGroupChatMessages();
+
+  // Show loading
+  groupChatState.groupMessages.push({ role: 'system', content: '🤔 虚拟人们正在思考...' });
+  renderGroupChatMessages();
+
+  try {
+    const data = await apiPost('/scenes/' + groupChatState.selectedSceneId + '/group-chat', {
+      message: msg,
+      temperature: 0.7,
+    });
+
+    // Remove loading message
+    groupChatState.groupMessages = groupChatState.groupMessages.filter(m => !(m.role === 'system' && m.content.includes('正在思考')));
+
+    // Add turns
+    const turns = data.turns || [];
+    for (const turn of turns) {
+      groupChatState.groupMessages.push({
+        role: 'participant',
+        speaker: turn.name,
+        content: turn.reply,
+        thinking: turn.reasoning,
+        decision: turn.decision,
+      });
+    }
+    renderGroupChatMessages();
+  } catch (e) {
+    // Remove loading message
+    groupChatState.groupMessages = groupChatState.groupMessages.filter(m => !(m.role === 'system' && m.content.includes('正在思考')));
+    toast('群聊失败: ' + e.message, 'error');
+  } finally {
+    input.disabled = false;
+    $('group-chat-send').disabled = false;
+    input.focus();
+  }
+}

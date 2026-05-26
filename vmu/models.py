@@ -228,3 +228,14 @@ class InteractionResult(BaseModel):
     response: str
     updated_memory: Optional[MemoryState] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class GroupChatTurn(BaseModel):
+    """群聊中单个虚拟人的一轮决策"""
+    instance_id: str
+    name: str
+    type_id: str
+    decision: str = Field(..., description="REPLY 或 PASS")
+    reasoning: str = ""
+    reply: str = ""
+    updated_memory: Optional[MemoryState] = None

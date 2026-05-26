@@ -300,6 +300,7 @@ async def generate(req: LlmGenerateRequest):
 # ═══════════════════════════════════════════════
 
 from vmu import PersonaManager, PersonaAgent
+from vmu.agent import GroupChatEngine
 from vmu.models import (
     Demographics, Psychographics, BehavioralTraits,
     Context, SceneContext, BehaviorEngine,
@@ -544,6 +545,43 @@ async def delete_scene(scene_id: str):
 async def create_presets():
     types = manager.create_preset_types()
     return {"types": [pt.model_dump() for pt in types]}
+
+
+# ─── Group Chat ───
+
+class GroupChatRequest(BaseModel):
+    message: str
+    temperature: float = 0.7
+
+
+@app.post("/api/v1/scenes/{scene_id}/group-chat")
+async def group_chat(scene_id: str, req: GroupChatRequest):
+    from deepseek_client import chat_completion
+    
+    scene = manager.get_scene(scene_id)
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    
+    participants = manager.get_scene_instances(scene_id)
+    if not participants:
+        raise HTTPException(status_code=400, detail="Scene has no instantiated participants")
+    
+    engine = GroupChatEngine(llm_client=chat_completion)
+    try:
+        turns = engine.run_turn(
+            scene_id=scene_id,
+            participants=participants,
+            user_message=req.message,
+            temperature=req.temperature,
+            storage=manager.storage,
+        )
+        return {
+            "scene_id": scene_id,
+            "user_message": req.message,
+            "turns": turns,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Group chat failed: {str(e)}")
 
 
 # ─── Dashboard Stats ───

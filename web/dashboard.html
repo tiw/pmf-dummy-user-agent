@@ -317,6 +317,57 @@
     .chat-instance-item:hover { background: var(--surface-hover); }
     .chat-instance-item.active { background: var(--primary-soft); }
 
+    /* Group chat styles */
+    .group-member-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .group-member-tag .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
+    .chat-bubble.group {
+      align-self: flex-start;
+      background: var(--bg);
+      color: var(--ink);
+      border: 1px solid var(--border-light);
+      border-bottom-left-radius: 4px;
+      max-width: 85%;
+    }
+    .chat-bubble .bubble-sender {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--primary);
+      margin-bottom: 4px;
+    }
+    .chat-bubble .bubble-thinking {
+      font-size: 11px;
+      color: var(--ink-tertiary);
+      margin-bottom: 6px;
+      padding: 6px 10px;
+      background: rgba(0,0,0,0.03);
+      border-radius: 6px;
+      border-left: 2px solid var(--warning);
+    }
+    .chat-bubble .bubble-pass {
+      font-size: 11px;
+      color: var(--ink-tertiary);
+      font-style: italic;
+    }
+    .group-scene-item {
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background .15s;
+      margin-bottom: 2px;
+    }
+    .group-scene-item:hover { background: var(--surface-hover); }
+    .group-scene-item.active { background: var(--primary-soft); }
+
     .section-title {
       font-size: 18px;
       font-weight: 700;
@@ -546,32 +597,77 @@
         <!-- Chat -->
         <div class="page" id="page-chat">
           <div class="section-title">对话测试</div>
-          <div class="section-subtitle">选择虚拟人实例，进行实时 LLM 对话</div>
-          <div style="display:grid;grid-template-columns:280px 1fr;gap:20px;">
-            <div class="card" style="max-height:520px;overflow-y:auto;">
-              <div class="card-header">
-                <span class="card-title">选择实例</span>
-              </div>
-              <div class="card-body" id="chat-instance-list" style="padding:10px;">
-                <div class="empty-state" style="padding:30px 10px;">
-                  <p>暂无可用实例</p>
+          <div class="section-subtitle">单人对话或群聊模式，虚拟人会先思考再决定是否发言</div>
+
+          <!-- Mode Tabs -->
+          <div class="tabs" style="margin-bottom:16px;">
+            <div class="tab active" data-chat-mode="single" id="tab-single">单人模式</div>
+            <div class="tab" data-chat-mode="group" id="tab-group">群聊模式</div>
+          </div>
+
+          <!-- Single Mode -->
+          <div id="chat-single-mode">
+            <div style="display:grid;grid-template-columns:280px 1fr;gap:20px;">
+              <div class="card" style="max-height:520px;overflow-y:auto;">
+                <div class="card-header">
+                  <span class="card-title">选择实例</span>
                 </div>
-              </div>
-            </div>
-            <div>
-              <div class="chat-container" id="chat-box">
-                <div class="chat-messages" id="chat-messages">
-                  <div class="empty-state" style="padding-top:120px;">
-                    <div class="icon">✉</div>
-                    <h3>选择左侧实例开始对话</h3>
+                <div class="card-body" id="chat-instance-list" style="padding:10px;">
+                  <div class="empty-state" style="padding:30px 10px;">
+                    <p>暂无可用实例</p>
                   </div>
                 </div>
-                <div class="chat-input-bar">
-                  <input type="text" id="chat-input" placeholder="输入消息..." disabled>
-                  <button class="btn btn-primary" id="chat-send" disabled>发送</button>
+              </div>
+              <div>
+                <div class="chat-container" id="chat-box">
+                  <div class="chat-messages" id="chat-messages">
+                    <div class="empty-state" style="padding-top:120px;">
+                      <div class="icon">✉</div>
+                      <h3>选择左侧实例开始对话</h3>
+                    </div>
+                  </div>
+                  <div class="chat-input-bar">
+                    <input type="text" id="chat-input" placeholder="输入消息..." disabled>
+                    <button class="btn btn-primary" id="chat-send" disabled>发送</button>
+                  </div>
+                </div>
+                <div id="chat-instance-info" style="margin-top:12px;font-size:12px;color:var(--ink-tertiary);"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Group Mode -->
+          <div id="chat-group-mode" class="hidden">
+            <div style="display:grid;grid-template-columns:280px 1fr;gap:20px;">
+              <div class="card" style="max-height:520px;overflow-y:auto;">
+                <div class="card-header">
+                  <span class="card-title">选择场景</span>
+                </div>
+                <div class="card-body" id="chat-scene-list" style="padding:10px;">
+                  <div class="empty-state" style="padding:30px 10px;">
+                    <p>暂无已实例化的场景</p>
+                  </div>
                 </div>
               </div>
-              <div id="chat-instance-info" style="margin-top:12px;font-size:12px;color:var(--ink-tertiary);"></div>
+              <div>
+                <!-- Group Members -->
+                <div id="group-members-bar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;min-height:36px;"></div>
+
+                <div class="chat-container" id="group-chat-box">
+                  <div class="chat-messages" id="group-chat-messages">
+                    <div class="empty-state" style="padding-top:80px;">
+                      <div class="icon">✉</div>
+                      <h3>选择左侧场景开始群聊</h3>
+                      <p>群聊中每个虚拟人会先思考，再决定是否发言</p>
+                    </div>
+                  </div>
+                  <div class="chat-input-bar">
+                    <input type="text" id="group-chat-input" placeholder="输入消息..." disabled>
+                    <button class="btn btn-primary" id="group-chat-send" disabled>发送</button>
+                  </div>
+                </div>
+                <div id="group-chat-info" style="margin-top:12px;font-size:12px;color:var(--ink-tertiary);"></div>
+              </div>
             </div>
           </div>
         </div>
