@@ -419,6 +419,45 @@ class DummyUserTester:
         session.turns.append(turn)
         return result.response
 
+    async def asend_to_session(
+        self,
+        session_id: str,
+        agent_message: str,
+        temperature: float = 0.7,
+    ) -> str:
+        """send_to_session 的异步版本，使用异步 LLM 客户端。"""
+        session = self._sessions.get(session_id)
+        if not session:
+            raise ValueError(f"Session '{session_id}' 不存在")
+
+        if self.llm_client is None:
+            raise RuntimeError("需要 llm_client")
+
+        persona_agent = PersonaAgent(
+            instance=session.persona_instance,
+            llm_client=self.llm_client,
+            auto_persist=True,
+            storage=self.manager.storage,
+        )
+
+        result = await persona_agent.ainteract(
+            agent_message,
+            include_history=True,
+            temperature=temperature,
+        )
+
+        turn = TestTurn(
+            round_num=len(session.turns) + 1,
+            agent_message=agent_message,
+            user_response=result.response,
+            metadata={
+                "trust_level": session.persona_instance.memory.trust_level,
+                "emotional_state": session.persona_instance.memory.emotional_state,
+            },
+        )
+        session.turns.append(turn)
+        return result.response
+
     def get_session(self, session_id: str) -> Optional[TestSession]:
         """获取会话状态"""
         return self._sessions.get(session_id)

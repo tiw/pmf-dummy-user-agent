@@ -119,6 +119,75 @@ class ConversationEvaluator:
                 "suggestions": [],
             }
 
+    async def aevaluate(
+        self,
+        persona: PersonaInstance,
+        turns: List[TestTurn],
+        agent_name: str = "agent",
+    ) -> Dict[str, Any]:
+        """evaluate 的异步版本，使用异步 LLM 客户端。"""
+        if not self.llm_client:
+            return self._fallback_evaluation(persona, turns)
+
+        conversation_text = self._format_conversation(turns)
+        persona_desc = self._format_persona(persona)
+
+        prompt = f"""你是一位专业的对话质量评估专家。请评估以下 Agent 与虚拟用户的对话。
+
+## 虚拟用户设定
+{persona_desc}
+
+## 对话记录
+{conversation_text}
+
+## 评估要求
+
+请从以下四个维度评估（每项 1-10 分）：
+
+1. **角色一致性 (persona_consistency)**：虚拟用户是否始终符合其设定？有没有突然变成客服或助手的情况？
+2. **对话流畅度 (conversation_flow)**：对话是否自然？有没有逻辑断裂、重复、或尴尬的地方？
+3. **Agent 有效性 (agent_effectiveness)**：被测 Agent 是否专业？有没有理解用户需求？回应是否有效？
+4. **需求满足度 (need_fulfillment)**：虚拟用户的需求有没有被满足？Agent 是否解决了用户的问题？
+
+同时请给出：
+- 亮点（highlights）
+- 问题（issues）
+- 改进建议（suggestions）
+
+请严格按以下 JSON 格式输出，不要包含 markdown 代码块：
+{{
+  "overall_score": 0-10 的整数,
+  "dimensions": {{
+    "persona_consistency": {{"score": 0-10, "comment": "具体评价"}},
+    "conversation_flow": {{"score": 0-10, "comment": "具体评价"}},
+    "agent_effectiveness": {{"score": 0-10, "comment": "具体评价"}},
+    "need_fulfillment": {{"score": 0-10, "comment": "具体评价"}}
+  }},
+  "highlights": ["..."],
+  "issues": ["..."],
+  "suggestions": ["..."]
+}}"""
+
+        try:
+            response = await self.llm_client(
+                messages=[
+                    {"role": "system", "content": "你是一位专业的对话质量评估专家，擅长分析人机对话。"},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
+                max_tokens=2000,
+            )
+            return self._parse_evaluation(response)
+        except Exception as e:
+            return {
+                "overall_score": 0,
+                "error": str(e),
+                "dimensions": {},
+                "highlights": [],
+                "issues": [f"评估失败: {e}"],
+                "suggestions": [],
+            }
+
     def quick_score(self, turns: List[TestTurn]) -> float:
         """
         快速评分：基于对话长度、虚拟人记忆变化等简单指标。

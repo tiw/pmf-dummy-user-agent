@@ -20,10 +20,10 @@ from pydantic import BaseModel, Field
 
 # Import local modules
 from deepseek_client import (
-    expand_persona,
-    optimize_system_prompt,
-    critique_prompt,
-    chat_completion_json,
+    async_expand_persona,
+    async_optimize_system_prompt,
+    async_critique_prompt,
+    async_chat_completion,
 )
 
 # ─── Pydantic Models ───
@@ -194,7 +194,7 @@ async def generate(req: LlmGenerateRequest):
             raise HTTPException(status_code=400, detail="user_description 不能为空")
 
         try:
-            expanded = expand_persona(
+            expanded = await async_expand_persona(
                 f"产品：{product_name}（{product_type}）\n用户描述：{req.user_description}"
             )
         except Exception as e:
@@ -273,7 +273,7 @@ async def generate(req: LlmGenerateRequest):
 
     # LLM 优化
     try:
-        optimized = optimize_system_prompt(raw_prompt)
+        optimized = await async_optimize_system_prompt(raw_prompt)
         system_prompt = optimized
     except Exception as e:
         system_prompt = raw_prompt
@@ -281,7 +281,7 @@ async def generate(req: LlmGenerateRequest):
     # Self-Critique
     critique = None
     try:
-        critique = critique_prompt(system_prompt)
+        critique = await async_critique_prompt(system_prompt)
     except Exception:
         pass
 
@@ -457,16 +457,15 @@ async def interact(instance_id: str, req: InteractRequest):
     inst = manager.get_instance(instance_id)
     if not inst:
         raise HTTPException(status_code=404, detail="Instance not found")
-    
-    from deepseek_client import chat_completion
+
     agent = PersonaAgent(
         instance=inst,
-        llm_client=chat_completion,
+        llm_client=async_chat_completion,
         auto_persist=True,
         storage=manager.storage,
     )
     try:
-        result = agent.interact(
+        result = await agent.ainteract(
             req.message,
             include_history=req.include_history,
             temperature=req.temperature,
@@ -556,19 +555,17 @@ class GroupChatRequest(BaseModel):
 
 @app.post("/api/v1/scenes/{scene_id}/group-chat")
 async def group_chat(scene_id: str, req: GroupChatRequest):
-    from deepseek_client import chat_completion
-    
     scene = manager.get_scene(scene_id)
     if not scene:
         raise HTTPException(status_code=404, detail="Scene not found")
-    
+
     participants = manager.get_scene_instances(scene_id)
     if not participants:
         raise HTTPException(status_code=400, detail="Scene has no instantiated participants")
-    
-    engine = GroupChatEngine(llm_client=chat_completion)
+
+    engine = GroupChatEngine(llm_client=async_chat_completion)
     try:
-        turns = engine.run_turn(
+        turns = await engine.arun_turn(
             scene_id=scene_id,
             participants=participants,
             user_message=req.message,
@@ -708,11 +705,15 @@ async def send_testing_message(session_id: str, req: TestMessageRequest):
     3. 返回虚拟人的回复给外部 agent
     """
     try:
-        response = tester.send_to_session(
+        # 为 tester 临时设置异步 llm_client
+        original_client = tester.llm_client
+        tester.llm_client = async_chat_completion
+        response = await tester.asend_to_session(
             session_id=session_id,
             agent_message=req.message,
             temperature=req.temperature,
         )
+        tester.llm_client = original_client
         session = tester.get_session(session_id)
         return {
             "session_id": session_id,
@@ -738,8 +739,8 @@ async def evaluate_testing_session(session_id: str):
         raise HTTPException(status_code=404, detail="Session not found")
 
     try:
-        evaluator = ConversationEvaluator()
-        evaluation = evaluator.evaluate(
+        evaluator = ConversationEvaluator(llm_client=async_chat_completion)
+        evaluation = await evaluator.aevaluate(
             persona=session.persona_instance,
             turns=session.turns,
             agent_name=session.agent_name,

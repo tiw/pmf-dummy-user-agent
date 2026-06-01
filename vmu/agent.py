@@ -163,6 +163,55 @@ class PersonaAgent:
         self.instance.memory = new_memory
         return new_memory
     
+    async def ainteract(
+        self,
+        user_input: str,
+        include_history: bool = True,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        **llm_kwargs
+    ) -> InteractionResult:
+        """interact 的异步版本，llm_client 必须是 async callable。"""
+        if self.llm_client is None:
+            raise RuntimeError(
+                "PersonaAgent 未配置 llm_client。"
+                "请传入一个 async callable，如 deepseek_client.async_chat_completion"
+            )
+
+        self.instance.message_history.append(
+            Message(role="user", content=user_input)
+        )
+
+        messages = self._build_messages(user_input, include_history)
+        response_text = await self.llm_client(
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            **llm_kwargs
+        )
+
+        self.instance.message_history.append(
+            Message(role="assistant", content=response_text)
+        )
+
+        updated_memory = self._update_memory(user_input, response_text)
+
+        if self.memory_update_callback:
+            self.memory_update_callback(self.instance, updated_memory)
+
+        if self.auto_persist and self.storage:
+            self.storage.save("instances", self.instance.instance_id, self.instance.model_dump())
+
+        return InteractionResult(
+            instance_id=self.instance.instance_id,
+            response=response_text,
+            updated_memory=updated_memory,
+            metadata={
+                "history_length": len(self.instance.message_history),
+                "temperature": temperature,
+            }
+        )
+
     def reset_history(self):
         """清空对话历史（保留 system prompt 和 memory）"""
         self.instance.message_history = []
@@ -362,6 +411,87 @@ class GroupChatEngine:
                 updated_memory = self._update_memory_simple(inst, user_message, reply)
 
                 # 持久化
+                if storage:
+                    storage.save("instances", inst.instance_id, inst.model_dump())
+            else:
+                updated_memory = None
+
+            turns.append({
+                "instance_id": inst.instance_id,
+                "name": inst.name,
+                "type_id": inst.type_id,
+                "decision": decision,
+                "reasoning": reasoning,
+                "reply": reply,
+                "updated_memory": updated_memory.model_dump() if updated_memory else None,
+            })
+
+        return turns
+
+    async def arun_turn(
+        self,
+        scene_id,
+        participants,
+        user_message,
+        temperature=0.7,
+        max_history=10,
+        storage=None,
+    ):
+        """run_turn 的异步版本，llm_client 必须是 async callable。"""
+        if not self.llm_client:
+            raise RuntimeError("GroupChatEngine 未配置 llm_client")
+
+        shuffled = list(participants)
+        random.shuffle(shuffled)
+
+        shared_history = self._build_shared_history(participants, max_history)
+        turns = []
+        round_replies = []
+
+        for inst in shuffled:
+            group_prompt = build_group_chat_prompt(
+                instance=inst,
+                all_participants=participants,
+                chat_history=shared_history + round_replies,
+                user_message=user_message,
+            )
+
+            messages = [
+                {"role": "system", "content": inst.system_prompt + group_prompt},
+            ]
+
+            try:
+                raw_response = await self.llm_client(
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=800,
+                )
+            except Exception as e:
+                turns.append({
+                    "instance_id": inst.instance_id,
+                    "name": inst.name,
+                    "type_id": inst.type_id,
+                    "decision": "PASS",
+                    "reasoning": f"LLM 调用失败: {str(e)}",
+                    "reply": "",
+                    "updated_memory": None,
+                })
+                continue
+
+            parsed = _parse_group_chat_response(raw_response)
+            decision = parsed["decision"]
+            reasoning = parsed["thinking"]
+            reply = parsed["content"] if decision == "REPLY" else ""
+
+            if reply.lower() in ("无", "none", "pass", ""):
+                decision = "PASS"
+                reply = ""
+
+            if decision == "REPLY" and reply:
+                round_replies.append({"speaker": inst.name, "content": reply})
+                inst.message_history.append(Message(role="user", content=user_message))
+                inst.message_history.append(Message(role="assistant", content=reply))
+                updated_memory = self._update_memory_simple(inst, user_message, reply)
                 if storage:
                     storage.save("instances", inst.instance_id, inst.model_dump())
             else:
