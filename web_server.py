@@ -13,10 +13,11 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from starlette.responses import Response as StarletteResponse
 
 # Import local modules
 from deepseek_client import (
@@ -308,6 +309,67 @@ from vmu.models import (
 )
 
 manager = PersonaManager()
+
+# ═══════════════════════════════════════════════
+# Agent-Friendly Middleware & Setup
+# ═══════════════════════════════════════════════
+
+from vmu.agent_friendly import (
+    AgentFriendlyResponseBuilder,
+    IntentRouter,
+    NLQueryEngine,
+    IntentRequest,
+    QueryRequest,
+    CAPABILITIES_REGISTRY,
+)
+
+intent_router = IntentRouter(manager=manager, llm_client=async_chat_completion)
+nl_engine = NLQueryEngine(llm_client=async_chat_completion)
+
+@app.middleware("http")
+async def agent_friendly_response_wrapper(request: Request, call_next):
+    """
+    自动为 API 响应添加 agent-friendly 导航元数据：
+    _links 和 suggested_actions。
+    让外部 Agent 能够从响应中自主发现下一步操作。
+    """
+    response = await call_next(request)
+
+    # 只处理 /api/ 路径的成功 JSON 响应
+    if not request.url.path.startswith("/api/"):
+        return response
+    if response.status_code >= 400:
+        return response
+    # 跳过已经由 agent-friendly 端点自己包装的响应
+    if request.url.path in ("/api/v1/capabilities", "/api/v1/intent", "/api/v1/query"):
+        return response
+
+    content_type = response.headers.get("content-type", "")
+    if "application/json" not in content_type:
+        return response
+
+    # 读取响应体
+    body = b""
+    async for chunk in response.body_iterator:
+        body += chunk
+
+    try:
+        data = json.loads(body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return StarletteResponse(content=body, status_code=response.status_code, headers=dict(response.headers))
+
+    # 包装响应
+    wrapped = AgentFriendlyResponseBuilder.wrap(
+        data, request.url.path, request.method
+    )
+    new_body = json.dumps(wrapped, ensure_ascii=False).encode("utf-8")
+
+    headers = dict(response.headers)
+    headers["content-length"] = str(len(new_body))
+    headers["content-type"] = "application/json"
+
+    return StarletteResponse(content=new_body, status_code=response.status_code, headers=headers)
+
 
 # ─── Helper ───
 
@@ -866,6 +928,62 @@ async def test_scene_run(scene_id: str, req: TestSceneRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"场景测试失败: {str(e)}")
+
+
+# ═══════════════════════════════════════════════
+# Agent-Friendly Endpoints (v1)
+# 让外部 Agent 能够自主发现和使用服务
+# ═══════════════════════════════════════════════
+
+@app.get("/api/v1/capabilities")
+async def get_capabilities():
+    """
+    获取完整的服务能力目录。
+    Agent 连接此服务时，应首先调用此端点了解可用能力。
+    """
+    return AgentFriendlyResponseBuilder.wrap(
+        CAPABILITIES_REGISTRY,
+        "/api/v1/capabilities",
+        "GET",
+    )
+
+
+@app.post("/api/v1/intent")
+async def post_intent(req: IntentRequest):
+    """
+    用高层意图描述你想做什么，服务自动执行对应操作。
+
+    示例:
+        {"intent": "test_agent", "params": {"persona_type": "anxious_buyer"}}
+        {"intent": "create_preset_personas", "params": {}}
+        {"intent": "interact_with_persona", "params": {"instance_id": "inst_xxx", "message": "你好"}}
+
+    支持的意图见 capabilities.supported_intents。
+    """
+    result = await intent_router.route(req.intent, req.params)
+    return AgentFriendlyResponseBuilder.wrap(
+        result,
+        "/api/v1/intent",
+        "POST",
+    )
+
+
+@app.post("/api/v1/query")
+async def post_query(req: QueryRequest):
+    """
+    用自然语言提问，获取建议的 API 调用序列。
+
+    示例:
+        {"question": "我想测试我的销售 agent，该怎么做？"}
+        {"question": "有哪些虚拟人类型可用？"}
+        {"question": "怎么创建一个场景让多个虚拟人一起聊天？"}
+    """
+    result = await nl_engine.query(req.question, req.context)
+    return AgentFriendlyResponseBuilder.wrap(
+        result,
+        "/api/v1/query",
+        "POST",
+    )
 
 
 # Mount static files AFTER all API routes

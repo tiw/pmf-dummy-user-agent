@@ -268,6 +268,7 @@ JSON 格式，可直接查看和手动编辑。
 │   ├── manager.py            # 核心管理器（CRUD + 实例化）
 │   ├── agent.py              # LLM 交互 Agent
 │   ├── prompts.py            # Prompt 渲染 + 变异生成
+│   ├── agent_friendly.py     # 🆕 Agent-Friendly 基础设施
 │   └── testing/              # 🆕 测试外部 Agent 模块
 │       ├── tester.py         #   测试引擎
 │       ├── adapters.py       #   Agent 适配器
@@ -279,7 +280,8 @@ JSON 格式，可直接查看和手动编辑。
 ├── data/                     # 持久化数据（运行时生成）
 ├── persona_generator.py      # CLI 单人生成（原有）
 ├── deepseek_client.py        # LLM API 封装（原有）
-├── web_server.py             # FastAPI Web 服务（原有 + Testing API）
+├── web_server.py             # FastAPI Web 服务（原有 + Testing API + Agent-Friendly）
+├── mcp_server.py             # 🆕 MCP 协议服务器（Claude/Cursor 零配置集成）
 ├── requirements.txt
 └── README.md
 ```
@@ -391,6 +393,96 @@ curl -X DELETE http://localhost:8000/api/v1/testing/sessions/session_xxx
 ```bash
 python examples/test_external_agent.py
 ```
+
+---
+
+## 🆕 模式五：Agent-Friendly API（让 Agent 自主使用）
+
+PersonaForge 现在对 **Agent 自身** 更友好——Agent 可以自主发现能力、判断用法，不需要人类提前教它每个 API 的细节。
+
+### 设计哲学
+
+| 传统 API | Agent-Friendly API |
+|---------|-------------------|
+| Agent 需要提前阅读文档 | Agent 连接后自动发现能力 |
+| 必须记住精确端点路径 | 描述意图即可，服务自动路由 |
+| 不知道下一步该调用什么 | 每个响应自带 `_links` + `suggested_actions` |
+| 需要人工配置集成 | MCP Server 零配置自动发现 |
+
+### 1. 能力自发现
+
+Agent 连接后首先调用：
+
+```bash
+curl http://localhost:8000/api/v1/capabilities
+```
+
+返回完整的能力目录——每个端点都有 `description` + `when_to_use`，Agent 直接消费即可。
+
+### 2. 意图驱动
+
+不需要记具体 API，描述想做什么：
+
+```bash
+curl -X POST http://localhost:8000/api/v1/intent \
+  -H "Content-Type: application/json" \
+  -d '{"intent": "test_agent", "params": {"persona_type": "anxious_buyer"}}'
+```
+
+支持意图：`test_agent`、`create_preset_personas`、`interact_with_persona`、`group_chat`、`create_scene` 等。
+
+### 3. 自然语言查询
+
+直接问"我该怎么用"：
+
+```bash
+curl -X POST http://localhost:8000/api/v1/query \
+  -H "Content-Type: application/json" \
+  -d '{"question": "我想测试我的销售 agent，该怎么做？"}'
+```
+
+### 4. 响应自带导航
+
+**所有 API 响应**都自动注入 `_links` 和 `suggested_actions`：
+
+```json
+{
+  "data": { ... },
+  "_links": {
+    "self": { "href": "/api/v1/testing/sessions/session_xxx", "method": "GET" },
+    "send_message": { "href": "/api/v1/testing/sessions/session_xxx/message", "method": "POST" },
+    "get_report": { "href": "/api/v1/testing/sessions/session_xxx/report", "method": "GET" }
+  },
+  "suggested_actions": [
+    { "action": "send_message", "description": "向虚拟人发送消息，开始测试", "method": "POST", "href": "..." },
+    { "action": "get_report", "description": "查看测试报告", "method": "GET", "href": "..." }
+  ]
+}
+```
+
+Agent 顺着响应建议走即可，几乎不需要先验知识。
+
+### 5. MCP Server（零配置集成）
+
+如果你用 Claude Desktop / Cursor / Cline 等支持 MCP 的客户端：
+
+```json
+{
+  "mcpServers": {
+    "personaforge": {
+      "command": "python",
+      "args": ["/path/to/mcp_server.py"]
+    }
+  }
+}
+```
+
+Agent 会自动发现 16 个 tools，包括：
+- `get_capabilities` / `query_service` / `execute_intent`
+- `create_preset_personas` / `list_persona_types` / `create_persona_instance`
+- `interact_with_persona`
+- `create_scene` / `instantiate_scene` / `group_chat`
+- `create_test_session` / `send_test_message` / `get_test_report` / `evaluate_test_session` / `close_test_session`
 
 ---
 

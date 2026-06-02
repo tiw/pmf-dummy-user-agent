@@ -2,3 +2,6 @@ openai>=1.0.0
 fastapi>=0.100.0
 uvicorn>=0.23.0
 pydantic>=2.0.0
+
+# 可选：如果使用 MCP Server 与 Claude Desktop / Cursor 等客户端集成
+# mcp>=1.0.0
