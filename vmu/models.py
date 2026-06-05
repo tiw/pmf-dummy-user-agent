@@ -181,6 +181,23 @@ class SceneParticipant(BaseModel):
         "",
         description="该场景对该类型参与者的额外 prompt 补充"
     )
+    # ── 新增：场景评估相关 ──
+    behavior_overrides: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="场景特定的行为参数覆盖，如 {'hesitation': 0.8, 'info_release': 'slow'}"
+    )
+    private_info_override: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="场景特定的私有信息覆盖"
+    )
+    expected_stages: List[str] = Field(
+        default_factory=list,
+        description="该参与者预期经历的销售阶段，用于评估 agent 表现"
+    )
+    min_info_release: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="最低信息释放要求，如 {'pain_points': True, 'budget_range': True}"
+    )
 
 
 class Scene(BaseModel):
@@ -210,10 +227,24 @@ class Scene(BaseModel):
     
     # 共享记忆/上下文（所有参与者可见）
     shared_context: Dict[str, Any] = Field(default_factory=dict)
-    
+
+    # ── 新增：场景评估标准 ──
+    expected_stages: List[str] = Field(
+        default_factory=list,
+        description="场景下销售 agent 应该覆盖的销售阶段"
+    )
+    success_criteria: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="成功标准，如 {'min_stage_coverage': 0.8, 'min_trust_level': 0.5}"
+    )
+    evaluation_config: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="评估配置，如 {'require_all_stages': False, 'info_release_weight': 0.3}"
+    )
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-    
+
     def model_dump(self, **kwargs) -> Dict[str, Any]:
         d = super().model_dump(**kwargs)
         for key in ("created_at", "updated_at"):

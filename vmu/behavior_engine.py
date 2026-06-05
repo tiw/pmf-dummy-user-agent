@@ -8,7 +8,35 @@ B2B 销售场景下的用户行为引擎。
 import random
 from typing import Any, Dict, List, Optional
 
+from pydantic import BaseModel, Field
+
 from .models import Message, PersonaInstance
+
+
+# ───────────────────────────────────────────────
+# 行为参数模型（支持显式定义 + 动态映射）
+# ───────────────────────────────────────────────
+
+class BehaviorParams(BaseModel):
+    """用户行为参数。可从 persona 字段动态映射，也可显式覆盖。"""
+    info_release: str = Field("normal", description="信息释放速度: fast/normal/slow")
+    hesitation: float = Field(0.3, ge=0.0, le=1.0, description="犹豫度，越高越不愿意一次性给全信息")
+    price_sensitive: bool = Field(False, description="是否对价格敏感")
+    risk_averse: bool = Field(False, description="是否风险厌恶")
+    tech_challenger: bool = Field(False, description="是否会在技术层面挑战销售")
+    quick_decider: bool = Field(False, description="是否快速决策")
+    skepticism_level: float = Field(0.5, ge=0.0, le=1.0, description="怀疑程度")
+    communication_style: str = Field("", description="沟通风格描述")
+
+    def apply_overrides(self, overrides: Dict[str, Any]) -> "BehaviorParams":
+        """应用外部覆盖参数，返回新实例。"""
+        if not overrides:
+            return self
+        data = self.model_dump()
+        for key, value in overrides.items():
+            if key in data:
+                data[key] = value
+        return BehaviorParams(**data)
 
 
 # ───────────────────────────────────────────────
@@ -75,10 +103,14 @@ def detect_sales_stage(sales_msg: str, current_stage: Optional[str] = None) -> s
 # 性格参数映射
 # ───────────────────────────────────────────────
 
-def extract_behavior_params(persona: PersonaInstance) -> Dict[str, Any]:
+def extract_behavior_params(
+    persona: PersonaInstance,
+    overrides: Optional[Dict[str, Any]] = None,
+) -> BehaviorParams:
     """
     从 PersonaInstance 的现有字段映射出行为参数。
     零侵入：不需要修改 models.py。
+    支持通过 overrides 显式覆盖任何参数。
     """
     bt = persona.behavioral_traits
     ps = persona.psychographics
@@ -110,16 +142,22 @@ def extract_behavior_params(persona: PersonaInstance) -> Dict[str, Any]:
     # 快速决策倾向
     quick_decider = "直觉" in ps.decision_style or "冲动" in ps.decision_style
 
-    return {
-        "info_release": info_release,
-        "hesitation": round(hesitation, 2),
-        "price_sensitive": price_sensitive,
-        "risk_averse": risk_averse,
-        "tech_challenger": tech_challenger,
-        "quick_decider": quick_decider,
-        "skepticism_level": bt.skepticism_level,
-        "communication_style": bt.communication,
-    }
+    params = BehaviorParams(
+        info_release=info_release,
+        hesitation=round(hesitation, 2),
+        price_sensitive=price_sensitive,
+        risk_averse=risk_averse,
+        tech_challenger=tech_challenger,
+        quick_decider=quick_decider,
+        skepticism_level=bt.skepticism_level,
+        communication_style=bt.communication,
+    )
+
+    # 应用显式覆盖（场景特定调参）
+    if overrides:
+        params = params.apply_overrides(overrides)
+
+    return params
 
 
 # ───────────────────────────────────────────────
@@ -195,10 +233,23 @@ class UserBehaviorEngine:
     - LLM 只负责把骨架翻译成自然语言
     """
 
-    def __init__(self, persona: PersonaInstance, private_info: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        persona: PersonaInstance,
+        private_info: Optional[Dict[str, Any]] = None,
+        behavior_overrides: Optional[Dict[str, Any]] = None,
+        private_info_override: Optional[Dict[str, Any]] = None,
+    ):
         self.persona = persona
-        self.params = extract_behavior_params(persona)
-        self.private_info = private_info or generate_private_info(persona.type_id)
+        self.params = extract_behavior_params(persona, overrides=behavior_overrides)
+        base_private = private_info or generate_private_info(persona.type_id)
+        # 应用场景特定的私有信息覆盖
+        if private_info_override:
+            merged = dict(base_private)
+            merged.update(private_info_override)
+            self.private_info = merged
+        else:
+            self.private_info = base_private
         self.collected: Dict[str, bool] = {}
         self.stage_history: List[str] = []
         self.current_stage: Optional[str] = None
@@ -227,7 +278,7 @@ class UserBehaviorEngine:
 
         # ── 初次接触 ──
         if stage == "initial_contact":
-            if p["info_release"] == "fast":
+            if p.info_release == "fast":
                 return (
                     "礼貌简短回应，快速进入正题。可以说'你好，我了解到你们的产品，"
                     "想了解一下是否能解决我们【{}】的问题'。"
@@ -242,7 +293,7 @@ class UserBehaviorEngine:
         if stage == "need_discovery":
             if revealed_pain:
                 # 已经说过一些痛点
-                if p["hesitation"] > 0.4:
+                if p.hesitation > 0.4:
                     return (
                         "确认之前说的痛点，但保留核心细节。可以说'之前说的那些是表象，"
                         "更深入的问题是...'然后透露第二个痛点（保留最关键的不说）。"
@@ -255,12 +306,12 @@ class UserBehaviorEngine:
                 )
 
             # 第一次被问需求
-            if p["hesitation"] > 0.5:
+            if p.hesitation > 0.5:
                 return (
                     "只透露最表面的痛点，不说核心问题。可以说'最近确实有点效率问题，"
                     "但具体情况我还在整理'。不要提具体工具或预算。"
                 )
-            if p["info_release"] == "fast":
+            if p.info_release == "fast":
                 return (
                     "直接说出核心痛点和团队现状。包括：主要痛点是【{}】，"
                     "团队【{}】，目前用【{}】。".format(
@@ -277,17 +328,17 @@ class UserBehaviorEngine:
 
         # ── 方案展示 ──
         if stage == "solution_presentation":
-            if p["tech_challenger"]:
+            if p.tech_challenger:
                 return (
                     "对展示的功能表示怀疑，从技术角度提出挑战。可以问'这个功能在高并发下表现如何？"
                     "你们的数据存储方案是什么？有客户案例吗？'"
                 )
-            if p["skepticism_level"] > 0.6:
+            if p.skepticism_level > 0.6:
                 return (
                     "保持怀疑，要求看到与自己场景相关的部分。可以说'这个功能听起来不错，"
                     "但我们的场景是【{}】，你们有类似案例吗？'".format(pi["pain_points"][0][:15])
                 )
-            if p["info_release"] == "fast":
+            if p.info_release == "fast":
                 return (
                     "积极回应，表达对某些功能的兴趣，追问落地细节。可以说'这个功能正是我们需要的，"
                     "实施周期多久？需要团队配合做什么？'"
@@ -299,19 +350,19 @@ class UserBehaviorEngine:
 
         # ── 异议处理 ──
         if stage == "objection_handling":
-            if p["risk_averse"]:
+            if p.risk_averse:
                 return (
                     "强调稳定性和风险顾虑，要求更多保障。可以说'我理解你们的方案，"
                     "但我们最担心的是【{}】，你们有什么保障措施？需要试运行。'".format(
                         random.choice(["稳定性", "数据安全", "迁移成本", "团队学习成本"])
                     )
                 )
-            if p["tech_challenger"]:
+            if p.tech_challenger:
                 return (
                     "提出技术层面的深度质疑。可以说'我关心的是技术架构层面的问题："
                     "API 兼容性、数据迁移方案、故障恢复机制。能详细说说吗？'"
                 )
-            if p["hesitation"] > 0.4:
+            if p.hesitation > 0.4:
                 return (
                     "表达顾虑，但给台阶。可以说'你说的有道理，但我还是有些担心..."
                     "能不能给我一些参考资料或者让我和团队商量一下？'"
@@ -323,7 +374,7 @@ class UserBehaviorEngine:
 
         # ── 价格/试用谈判 ──
         if stage == "pricing_discussion":
-            if p["price_sensitive"]:
+            if p.price_sensitive:
                 if not revealed_budget:
                     return (
                         "表示预算紧张，试探价格底线。可以说'我们的预算比较有限，"
@@ -333,7 +384,7 @@ class UserBehaviorEngine:
                     "要求折扣或更灵活的付费方案。可以说'这个价格超出我们预期了，"
                     "能不能按季度付？或者给初创团队一些优惠？'"
                 )
-            if p["quick_decider"] and not p["price_sensitive"]:
+            if p.quick_decider and not p.price_sensitive:
                 return (
                     "如果价格合理，表示可以接受，询问签约流程。可以说'价格可以接受，"
                     "如果没问题的话我们这周就能定下来。'"
@@ -350,17 +401,17 @@ class UserBehaviorEngine:
 
         # ── 决策 ──
         if stage == "decision":
-            if p["risk_averse"] and p["hesitation"] > 0.3:
+            if p.risk_averse and p.hesitation > 0.3:
                 return (
                     "表示需要再考虑，要求试用或参考客户。可以说'我还需要再想想，"
                     "能不能先给我们一个小范围试用？或者我能不能联系你们的现有客户聊聊？'"
                 )
-            if p["quick_decider"] and not p["risk_averse"]:
+            if p.quick_decider and not p.risk_averse:
                 return (
                     "明确表示可以推进，询问下一步。可以说'我觉得可以，"
                     "接下来是什么流程？需要我这边准备什么材料？'"
                 )
-            if p["skepticism_level"] > 0.6:
+            if p.skepticism_level > 0.6:
                 return (
                     "谨慎表示有意向，但设条件。可以说'如果试用效果达到预期，"
                     "我们可以推进。但我需要看到具体的 success criteria。'"
@@ -396,10 +447,10 @@ class UserBehaviorEngine:
             f"- 现有工具：{', '.join(self.private_info.get('current_tools', [])[:3])}",
             "",
             "=== 性格参数 ===",
-            f"- 信息释放速度：{self.params['info_release']}",
-            f"- 犹豫度：{self.params['hesitation']:.0%}",
-            f"- 价格敏感：{'是' if self.params['price_sensitive'] else '否'}",
-            f"- 风险厌恶：{'是' if self.params['risk_averse'] else '否'}",
+            f"- 信息释放速度：{self.params.info_release}",
+            f"- 犹豫度：{self.params.hesitation:.0%}",
+            f"- 价格敏感：{'是' if self.params.price_sensitive else '否'}",
+            f"- 风险厌恶：{'是' if self.params.risk_averse else '否'}",
             "",
             "【铁律】",
             "1. 严格按行为指导执行，不要偏离角色。",
