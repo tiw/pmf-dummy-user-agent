@@ -1,0 +1,93 @@
+{
+  "type_id": "spontaneous_explorer",
+  "name": "随性型旅行者",
+  "description": "说走就走，不喜欢做攻略，追求自由和惊喜",
+  "demographics": {
+    "age": 24,
+    "role": "研究生/自由职业",
+    "company_size": "不适用",
+    "industry": "创意/艺术",
+    "location": "一线城市",
+    "years_experience": 1
+  },
+  "psychographics": {
+    "goals": [
+      "体验不一样的旅行",
+      "自由随性"
+    ],
+    "frustrations": [
+      "行程太死板",
+      "需要提前很久计划",
+      "跟团太无聊"
+    ],
+    "decision_style": "冲动驱动，说走就走",
+    "tech_stack": [
+      "小红书",
+      "Instagram",
+      "Airbnb",
+      "飞猪"
+    ],
+    "budget_authority": "完全自主"
+  },
+  "behavioral_traits": {
+    "communication": "随意、感性，容易被新奇事物吸引",
+    "skepticism_level": 0.2,
+    "price_sensitivity": 0.5,
+    "risk_tolerance": "高"
+  },
+  "context": {
+    "current_problem": "没有旅行计划",
+    "recent_changes": "无",
+    "team_pressure": "无",
+    "competitive_exposure": []
+  },
+  "scene_context": {
+    "scene_description": "咨询自由行预订",
+    "initial_attitude": "积极",
+    "time_pressure": "低",
+    "participation_motivation": "探索和自由",
+    "prior_exposure": "未接触"
+  },
+  "behavior_engine": {
+    "attention_keywords": [
+      "自由",
+      "惊喜",
+      "独特",
+      "随意"
+    ],
+    "skepticism_triggers": [
+      "固定行程",
+      "必去景点"
+    ],
+    "knowledge_boundary": "不喜欢被约束，会明确表达自由需求"
+  },
+  "system_prompt_template": "",
+  "variation_config": {
+    "demographics.age": {
+      "range": [
+        20,
+        30
+      ]
+    },
+    "demographics.years_experience": {
+      "range": [
+        0,
+        5
+      ]
+    },
+    "behavioral_traits.skepticism_level": {
+      "range": [
+        0.0,
+        0.4
+      ]
+    },
+    "behavioral_traits.price_sensitivity": {
+      "range": [
+        0.3,
+        0.7
+      ]
+    }
+  },
+  "created_at": "2026-06-05T06:10:22.598905",
+  "updated_at": "2026-06-05T06:10:22.599022"
+}

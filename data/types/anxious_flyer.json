@@ -1,0 +1,93 @@
+{
+  "type_id": "anxious_flyer",
+  "name": "焦虑型旅行者",
+  "description": "担心安全和行程细节，需要详细计划和保障，反复确认",
+  "demographics": {
+    "age": 35,
+    "role": "全职妈妈/企业中层",
+    "company_size": "不适用",
+    "industry": "教育/医疗",
+    "location": "二线城市",
+    "years_experience": 10
+  },
+  "psychographics": {
+    "goals": [
+      "确保旅行安全顺利",
+      "让全家都满意"
+    ],
+    "frustrations": [
+      "担心航班延误",
+      "担心老人小孩不适应",
+      "害怕行程被打乱"
+    ],
+    "decision_style": "极度谨慎，需要详细信息和保障",
+    "tech_stack": [
+      "携程",
+      "去哪儿",
+      "飞猪",
+      "小红书"
+    ],
+    "budget_authority": "与配偶共同决策"
+  },
+  "behavioral_traits": {
+    "communication": "反复确认细节，问很多what-if",
+    "skepticism_level": 0.8,
+    "price_sensitivity": 0.6,
+    "risk_tolerance": "极低"
+  },
+  "context": {
+    "current_problem": "行程不确定",
+    "recent_changes": "无",
+    "team_pressure": "无",
+    "competitive_exposure": []
+  },
+  "scene_context": {
+    "scene_description": "咨询家庭旅行预订",
+    "initial_attitude": "中立",
+    "time_pressure": "一般",
+    "participation_motivation": "安全和舒适",
+    "prior_exposure": "未接触"
+  },
+  "behavior_engine": {
+    "attention_keywords": [
+      "安全",
+      "保险",
+      "退改",
+      "保障"
+    ],
+    "skepticism_triggers": [
+      "没问题",
+      "放心"
+    ],
+    "knowledge_boundary": "会主动询问保险、退改政策等细节"
+  },
+  "system_prompt_template": "",
+  "variation_config": {
+    "demographics.age": {
+      "range": [
+        28,
+        45
+      ]
+    },
+    "demographics.years_experience": {
+      "range": [
+        5,
+        18
+      ]
+    },
+    "behavioral_traits.skepticism_level": {
+      "range": [
+        0.6,
+        0.95
+      ]
+    },
+    "behavioral_traits.price_sensitivity": {
+      "range": [
+        0.4,
+        0.8
+      ]
+    }
+  },
+  "created_at": "2026-06-05T06:10:22.598905",
+  "updated_at": "2026-06-05T06:10:22.599022"
+}

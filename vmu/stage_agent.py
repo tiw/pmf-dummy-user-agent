@@ -32,6 +32,7 @@ class StageAwarePersonaAgent(PersonaAgent):
         storage=None,
         behavior_overrides: Optional[Dict[str, Any]] = None,
         private_info_override: Optional[Dict[str, Any]] = None,
+        domain: str = "b2b_sales",
     ):
         super().__init__(
             instance=instance,
@@ -45,6 +46,7 @@ class StageAwarePersonaAgent(PersonaAgent):
             instance,
             behavior_overrides=behavior_overrides,
             private_info_override=private_info_override,
+            domain=domain,
         )
 
     def _build_messages(self, user_input: str, include_history: bool = True) -> List[Dict[str, str]]:

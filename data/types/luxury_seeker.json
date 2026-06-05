@@ -1,0 +1,92 @@
+{
+  "type_id": "luxury_seeker",
+  "name": "奢华型旅行者",
+  "description": "追求极致体验，不在乎价格，要求高品质服务和独特体验",
+  "demographics": {
+    "age": 38,
+    "role": "企业高管/创业者",
+    "company_size": "不适用",
+    "industry": "金融/咨询",
+    "location": "一线城市",
+    "years_experience": 15
+  },
+  "psychographics": {
+    "goals": [
+      "获得独一无二的旅行体验",
+      "享受顶级服务"
+    ],
+    "frustrations": [
+      "服务不到位",
+      "体验千篇一律",
+      "需要排队"
+    ],
+    "decision_style": "直觉驱动，看品牌和口碑",
+    "tech_stack": [
+      "小红书",
+      "Tripadvisor",
+      "私域管家"
+    ],
+    "budget_authority": "完全自主"
+  },
+  "behavioral_traits": {
+    "communication": "直接、快节奏，不耐烦听推销",
+    "skepticism_level": 0.3,
+    "price_sensitivity": 0.1,
+    "risk_tolerance": "高"
+  },
+  "context": {
+    "current_problem": "找不到独特体验",
+    "recent_changes": "无",
+    "team_pressure": "无",
+    "competitive_exposure": []
+  },
+  "scene_context": {
+    "scene_description": "咨询高端旅行预订",
+    "initial_attitude": "中立",
+    "time_pressure": "低",
+    "participation_motivation": "独特体验",
+    "prior_exposure": "未接触"
+  },
+  "behavior_engine": {
+    "attention_keywords": [
+      "独特",
+      "定制",
+      "VIP",
+      "管家"
+    ],
+    "skepticism_triggers": [
+      "性价比",
+      "团购"
+    ],
+    "knowledge_boundary": "知道自己要什么，会直接提出高要求"
+  },
+  "system_prompt_template": "",
+  "variation_config": {
+    "demographics.age": {
+      "range": [
+        32,
+        50
+      ]
+    },
+    "demographics.years_experience": {
+      "range": [
+        8,
+        25
+      ]
+    },
+    "behavioral_traits.skepticism_level": {
+      "range": [
+        0.1,
+        0.5
+      ]
+    },
+    "behavioral_traits.price_sensitivity": {
+      "range": [
+        0.0,
+        0.3
+      ]
+    }
+  },
+  "created_at": "2026-06-05T06:10:22.598905",
+  "updated_at": "2026-06-05T06:10:22.599022"
+}
