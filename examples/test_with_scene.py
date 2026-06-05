@@ -375,6 +375,21 @@ if __name__ == "__main__":
             json.dump([r.to_dict() for r in results], f, ensure_ascii=False, indent=2)
         print(f"\n📄 详细 JSON 报告已保存: {report_path}")
 
+        # ── 生成可视化图表 ──
+        print(f"\n🎨 生成可视化图表...")
+        from vmu.testing.visualizer import EvaluationVisualizer
+
+        viz = EvaluationVisualizer(output_dir="reports")
+        chart_paths = viz.generate_full_report(
+            results=results,
+            sessions=sessions,
+            scene_stages=scene.expected_stages,
+        )
+
+        print(f"\n📊 图表已生成:")
+        for name, path in chart_paths.items():
+            print(f"  • {name}: {path}")
+
     except Exception as e:
         print(f"\n❌ 测试失败: {e}")
         import traceback
