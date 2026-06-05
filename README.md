@@ -219,12 +219,23 @@ agent.reset_history()
 
 ## 预设人格类型
 
+### B2B 销售场景
+
 | 类型 ID | 名称 | 特征 |
 |---------|------|------|
 | `anxious_buyer` | 焦虑型买家 | 怀疑度高(0.6-0.9)，价格敏感，需要安全感 |
 | `rational_analyst` | 理性分析师 | 数据驱动，关注 ROI，要求具体案例 |
 | `tech_skeptic` | 技术怀疑者 | 对新技术持疑，偏好成熟方案，challenge 架构 |
 | `impulsive_decider` | 冲动决策者 | 直觉驱动，快节奏，不耐烦 |
+
+### 旅行预订场景
+
+| 类型 ID | 名称 | 特征 |
+|---------|------|------|
+| `anxious_flyer` | 焦虑型旅行者 | 担心安全和行程细节，反复确认，需要保障 |
+| `budget_traveler` | 预算型旅行者 | 价格敏感，追求性价比，关注预算控制 |
+| `luxury_seeker` | 奢华型旅行者 | 追求极致体验，不在乎价格，要求高品质服务 |
+| `spontaneous_explorer` | 随性型旅行者 | 说走就走，不喜欢攻略，追求自由和惊喜 |
 
 每种类型可以通过 `variation_config` 定义差异范围，实例化时自动生成不同参数。
 
@@ -261,27 +272,35 @@ JSON 格式，可直接查看和手动编辑。
 
 ```
 .
-├── vmu/                      # 虚拟人管理核心库（新增）
+├── vmu/                      # 虚拟人管理核心库
 │   ├── __init__.py
 │   ├── models.py             # Pydantic 数据模型
 │   ├── storage.py            # JSON 持久化
 │   ├── manager.py            # 核心管理器（CRUD + 实例化）
 │   ├── agent.py              # LLM 交互 Agent
 │   ├── prompts.py            # Prompt 渲染 + 变异生成
+│   ├── behavior_engine.py    # 🆕 多 Domain 行为引擎（B2B + 旅行）
+│   ├── stage_agent.py        # 🆕 阶段感知 Agent
 │   ├── agent_friendly.py     # 🆕 Agent-Friendly 基础设施
-│   └── testing/              # 🆕 测试外部 Agent 模块
+│   └── testing/              # 测试外部 Agent 模块
 │       ├── tester.py         #   测试引擎
 │       ├── adapters.py       #   Agent 适配器
 │       ├── evaluator.py      #   对话评估器
-│       └── report.py         #   测试报告
+│       ├── report.py         #   测试报告
+│       ├── scene_evaluator.py # 🆕 场景化评估器
+│       └── visualizer.py     # 🆕 评估结果可视化
 ├── examples/
 │   ├── run_scene.py          # 场景运行示例
-│   └── test_external_agent.py  # 🆕 测试外部 Agent 示例
+│   ├── test_external_agent.py  # 测试外部 Agent 示例
+│   ├── test_with_scene.py    # 🆕 场景化测试（销售场景）
+│   ├── test_travel_scene.py  # 🆕 场景化测试（旅行场景）
+│   └── compare_agent_modes.py # 🆕 自由发挥 vs 阶段感知对比
 ├── data/                     # 持久化数据（运行时生成）
 ├── persona_generator.py      # CLI 单人生成（原有）
 ├── deepseek_client.py        # LLM API 封装（原有）
-├── web_server.py             # FastAPI Web 服务（原有 + Testing API + Agent-Friendly）
-├── mcp_server.py             # 🆕 MCP 协议服务器（Claude/Cursor 零配置集成）
+├── web_server.py             # FastAPI Web 服务
+├── mcp_server.py             # MCP 协议服务器（Claude/Cursor 零配置集成）
+├── test_travel_mock.py       # 🆕 旅行场景 mock 测试
 ├── requirements.txt
 └── README.md
 ```
@@ -483,6 +502,119 @@ Agent 会自动发现 16 个 tools，包括：
 - `interact_with_persona`
 - `create_scene` / `instantiate_scene` / `group_chat`
 - `create_test_session` / `send_test_message` / `get_test_report` / `evaluate_test_session` / `close_test_session`
+
+---
+
+## 🆕 阶段感知行为引擎
+
+标准 PersonaAgent 是"自由发挥"模式——虚拟人根据性格设定随意回复。这在某些场景下不够真实。
+
+**阶段感知（StageAwarePersonaAgent）** 引入了"代码控制骨架 + LLM 润色"的方法论：
+
+### 核心设计
+
+1. **行为引擎（BehaviorEngine）**：为每个 Domain 定义标准阶段流程
+   - B2B 销售：`initial_contact → need_discovery → solution_presentation → objection_handling → pricing_discussion → decision`
+   - 旅行预订：`greet → gather_destination → gather_dates → gather_budget → gather_travelers → check_ready → present_options → confirm_booking`
+
+2. **阶段检测**：根据销售/客服人员的消息，自动判断当前处于哪个阶段
+
+3. **行为指导注入**：将阶段对应的行为规则动态追加到 system prompt
+   - 在 `need_discovery` 阶段，虚拟人应该逐步释放需求信息，而不是一次性说完
+   - 在 `objection_handling` 阶段，虚拟人应该提出质疑，测试客服的应对能力
+
+4. **私有信息逐步释放**：每个 persona 有自己的"秘密信息池"（痛点、预算、决策链），不会第一轮就全部暴露
+
+### 使用对比
+
+```python
+from vmu.agent import PersonaAgent              # 自由发挥
+from vmu.stage_agent import StageAwarePersonaAgent  # 阶段感知
+
+# 自由发挥：虚拟人随机回复，可能跳过关键阶段
+agent = PersonaAgent(instance=inst, llm_client=chat_completion)
+
+# 阶段感知：虚拟人按阶段推进，信息逐步释放
+agent = StageAwarePersonaAgent(
+    instance=inst,
+    llm_client=chat_completion,
+    domain="b2b_sales",  # 或 "travel_booking"
+)
+```
+
+运行对比测试：
+```bash
+python examples/compare_agent_modes.py --persona anxious_buyer --rounds 6
+```
+
+---
+
+## 🆕 场景化评估与可视化
+
+测试完 Agent 后，不仅要看对话记录，还要**量化评估** Agent 的表现。
+
+### SceneEvaluator
+
+基于 Scene 定义的预期行为标准，从 4 个维度打分：
+
+| 维度 | 评估内容 |
+|------|---------|
+| **阶段覆盖率** | Agent 是否按预期推进了各个阶段？漏了哪个阶段？ |
+| **信息释放得分** | 虚拟人的关键信息（痛点、预算、决策链）是否被 Agent 挖掘出来？ |
+| **信任度轨迹** | 对话过程中信任度是上升、下降还是波动？ |
+| **行为一致性** | 虚拟人的行为是否符合场景设定的性格参数？ |
+
+```python
+from vmu.testing.scene_evaluator import SceneEvaluator
+
+evaluator = SceneEvaluator(scene=scene)
+result = evaluator.evaluate(session)
+
+print(f"综合得分: {result.overall_score}")  # 0-100
+print(f"通过: {result.passed}")
+print(f"缺失阶段: {result.stage_coverage.missing_stages}")
+print(f"未挖掘信息: {result.info_release.missing_items}")
+```
+
+### EvaluationVisualizer
+
+将评估结果生成图表：
+
+```python
+from vmu.testing.visualizer import EvaluationVisualizer
+
+viz = EvaluationVisualizer(output_dir="reports")
+viz.generate_full_report(results, sessions, scene)
+# 生成：综合评分柱状图、多维度雷达图、信任度轨迹折线图、阶段覆盖热力图
+```
+
+依赖：`matplotlib`, `seaborn`, `numpy`
+
+运行示例：
+```bash
+python examples/test_with_scene.py      # B2B 销售场景评估
+python examples/test_travel_scene.py    # 旅行预订场景评估
+```
+
+---
+
+## 🆕 多 Domain 支持
+
+系统已支持两个 Domain：
+
+| Domain | 场景 | 预设类型 |
+|--------|------|---------|
+| `b2b_sales` | B2B 销售/产品演示 | anxious_buyer, rational_analyst, tech_skeptic, impulsive_decider |
+| `travel_booking` | 旅行预订/客服 | anxious_flyer, budget_traveler, luxury_seeker, spontaneous_explorer |
+
+切换 Domain：
+```python
+agent = StageAwarePersonaAgent(
+    instance=inst,
+    llm_client=chat_completion,
+    domain="travel_booking",  # 自动加载旅行预订的阶段流程和行为参数
+)
+```
 
 ---
 
