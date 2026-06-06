@@ -72,6 +72,11 @@ class PersonaManager:
         self.storage.save("types", pt.type_id, pt.model_dump())
         return pt
     
+    def register_type(self, pt: PersonaType) -> PersonaType:
+        """注册一个已构建的 PersonaType（从文件加载等场景使用）"""
+        self.storage.save("types", pt.type_id, pt.model_dump())
+        return pt
+    
     def get_type(self, type_id: str) -> Optional[PersonaType]:
         """获取人格类型"""
         data = self.storage.load("types", type_id)

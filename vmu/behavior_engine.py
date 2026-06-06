@@ -176,17 +176,23 @@ def _detect_travel_stage(msg: str, current_stage: Optional[str] = None) -> str:
     if any(w in m for w in ["算了", "不需要", "不用", "没兴趣", "不订了", "取消"]):
         return "abandon"
 
-    # 确认预订
-    if any(w in m for w in ["确认", "预订", "下单", "付款", "签合同", "定下来"]):
+    # 检查信息是否足够（在 confirm_booking 之前，避免"确认一下"被误判）
+    if any(w in m for w in ["确认一下", "核对", "汇总", "信息齐了", "齐全", "够了"]):
+        return "check_ready"
+
+    # 确认预订（排除"确认一下"这种信息核对场景）
+    confirm_words = ["确认预订", "确认订单", "预订", "下单", "付款", "签合同", "定下来", "现在就定"]
+    # 只有当消息里包含确认类词汇但不包含"一下"时，才认为是 confirm_booking
+    if any(w in m for w in confirm_words) or ("确认" in m and "一下" not in m and "是否" not in m):
         return "confirm_booking"
 
     # 展示方案
     if any(w in m for w in ["方案", "推荐", "选择", "路线", "行程", "酒店", "景点", "套餐"]):
         return "present_options"
 
-    # 检查信息是否足够
-    if any(w in m for w in ["信息", "确认一下", "齐全", "够了", "核对", "汇总"]):
-        return "check_ready"
+    # 问候（放在目的地/日期/预算之前，避免"您好，请问去哪"被误判为 gather_destination）
+    if any(w in m for w in ["您好", "你好", "欢迎", "嗨", "hello", "顾问", "小美", "很高兴"]):
+        return "greet"
 
     # 人数
     if any(w in m for w in ["几个人", "人数", "同行", "孩子", "老人", "带小孩", "情侣"]):
@@ -203,10 +209,6 @@ def _detect_travel_stage(msg: str, current_stage: Optional[str] = None) -> str:
     # 目的地
     if any(w in m for w in ["哪里", "目的地", "去哪", "城市", "国家", "想去"]):
         return "gather_destination"
-
-    # 问候
-    if len(m) < 50 and any(w in m for w in ["您好", "你好", "欢迎", "嗨", "hello"]):
-        return "greet"
 
     return current_stage if current_stage in TRAVEL_STAGES else "greet"
 
